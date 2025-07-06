@@ -1,0 +1,40 @@
+# Rust formatting configuration for Conflux project
+
+# Edition
+edition = "2021"
+
+# Line width
+max_width = 100
+
+# Indentation
+tab_spaces = 4
+hard_tabs = false
+
+# Imports
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+
+# Functions
+fn_single_line = false
+where_single_line = false
+
+# Structs and enums
+struct_field_align_threshold = 0
+enum_discrim_align_threshold = 0
+
+# Comments
+comment_width = 80
+wrap_comments = true
+normalize_comments = true
+
+# Strings
+format_strings = true
+
+# Control flow
+control_brace_style = "AlwaysSameLine"
+brace_style = "SameLineWhere"
+
+# Misc
+remove_nested_parens = true
+use_small_heuristics = "Default"

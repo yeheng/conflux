@@ -1,0 +1,47 @@
+# Conflux Configuration File
+# This is the default configuration for the Conflux distributed configuration center
+
+[server]
+host = "0.0.0.0"
+port = 8080
+max_connections = 1000
+request_timeout_secs = 30
+
+[raft]
+node_id = 1
+cluster_name = "conflux-cluster"
+data_dir = "./data/raft"
+heartbeat_interval_ms = 500
+election_timeout_ms = 1500
+snapshot_threshold = 1000
+max_applied_log_to_keep = 1000
+
+[storage]
+data_dir = "./data/storage"
+max_open_files = 1000
+cache_size_mb = 256
+write_buffer_size_mb = 64
+max_write_buffer_number = 3
+
+[database]
+url = "postgres://postgres:postgres@localhost:5432/conflux"
+max_connections = 10
+min_connections = 1
+connect_timeout_secs = 30
+idle_timeout_secs = 600
+max_lifetime_secs = 3600
+
+[security]
+jwt_secret = "your-secret-key-change-in-production"
+jwt_expiration_hours = 24
+enable_mtls = false
+# cert_file = "/path/to/cert.pem"
+# key_file = "/path/to/key.pem"
+# ca_file = "/path/to/ca.pem"
+
+[observability]
+metrics_enabled = true
+metrics_port = 9090
+tracing_enabled = true
+# tracing_endpoint = "http://jaeger:14268/api/traces"
+log_level = "info"
