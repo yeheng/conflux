@@ -28,7 +28,7 @@ pub enum ConfluxError {
     RocksDB(#[from] rocksdb::Error),
 
     #[error("Bincode error: {0}")]
-    Bincode(#[from] Box<bincode::ErrorKind>),
+    Bincode(#[from] bincode::error::DecodeError),
 
     #[error("Authentication error: {0}")]
     Auth(String),

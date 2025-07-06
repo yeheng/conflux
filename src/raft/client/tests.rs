@@ -2,7 +2,6 @@
 mod tests {
     use super::super::*;
     use crate::raft::store::Store;
-    use crate::raft::types::*;
     use std::collections::BTreeMap;
     use std::sync::Arc;
 

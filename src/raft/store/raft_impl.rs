@@ -2,7 +2,7 @@ use crate::raft::types::*;
 use super::types::{Store, ConfluxSnapshot};
 use openraft::{
     storage::{RaftLogReader, RaftSnapshotBuilder, Snapshot, SnapshotMeta},
-    Entry, OptionalSend, RaftLogId, StorageError, StorageIOError,
+    Entry, OptionalSend, StorageError, StorageIOError,
 };
 use std::fmt::Debug;
 use std::io::Cursor;
