@@ -1,13 +1,16 @@
 use crate::raft::types::*;
 use openraft::{
-    error::{InstallSnapshotError, NetworkError, RPCError, RaftError, ReplicationClosed, StreamingError, Fatal},
+    error::{
+        Fatal, InstallSnapshotError, NetworkError, RPCError, RaftError, ReplicationClosed,
+        StreamingError,
+    },
     network::{RPCOption, RaftNetwork, RaftNetworkFactory},
     raft::{
-        AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
-        VoteRequest, VoteResponse, SnapshotResponse,
+        AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest,
+        InstallSnapshotResponse, SnapshotResponse, VoteRequest, VoteResponse,
     },
     storage::Snapshot,
-    BasicNode, Vote, RPCTypes,
+    BasicNode, RPCTypes, Vote,
 };
 use reqwest::Client;
 
@@ -83,11 +86,13 @@ impl ConfluxNetwork {
 
     /// Get the target node's address
     async fn get_target_address(&self) -> Result<String, NetworkError> {
-        self.config.get_node_address(self.target_node_id).await
+        self.config
+            .get_node_address(self.target_node_id)
+            .await
             .ok_or_else(|| {
                 let err = std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Address not found for node {}", self.target_node_id)
+                    format!("Address not found for node {}", self.target_node_id),
                 );
                 NetworkError::new(&err)
             })
@@ -102,26 +107,29 @@ impl RaftNetwork<TypeConfig> for ConfluxNetwork {
     ) -> Result<AppendEntriesResponse<NodeId>, RPCError<NodeId, Node, RaftError<NodeId>>> {
         debug!("Sending AppendEntries to node {}", self.target_node_id);
 
-        let address = self.get_target_address().await
-            .map_err(|e| RPCError::Network(e))?;
+        let address = self.get_target_address().await.map_err(RPCError::Network)?;
 
         let url = format!("http://{}/raft/append_entries", address);
 
         match self.client.post(&url).json(&rpc).send().await {
-            Ok(response) => {
-                match response.json::<AppendEntriesResponse<NodeId>>().await {
-                    Ok(resp) => {
-                        debug!("AppendEntries response received from node {}", self.target_node_id);
-                        Ok(resp)
-                    }
-                    Err(e) => {
-                        error!("Failed to parse AppendEntries response: {}", e);
-                        Err(RPCError::Network(NetworkError::new(&e)))
-                    }
+            Ok(response) => match response.json::<AppendEntriesResponse<NodeId>>().await {
+                Ok(resp) => {
+                    debug!(
+                        "AppendEntries response received from node {}",
+                        self.target_node_id
+                    );
+                    Ok(resp)
                 }
-            }
+                Err(e) => {
+                    error!("Failed to parse AppendEntries response: {}", e);
+                    Err(RPCError::Network(NetworkError::new(&e)))
+                }
+            },
             Err(e) => {
-                error!("Failed to send AppendEntries to node {}: {}", self.target_node_id, e);
+                error!(
+                    "Failed to send AppendEntries to node {}: {}",
+                    self.target_node_id, e
+                );
                 Err(RPCError::Network(NetworkError::new(&e)))
             }
         }
@@ -134,24 +142,21 @@ impl RaftNetwork<TypeConfig> for ConfluxNetwork {
     ) -> Result<VoteResponse<NodeId>, RPCError<NodeId, Node, RaftError<NodeId>>> {
         debug!("Sending Vote to node {}", self.target_node_id);
 
-        let address = self.get_target_address().await
-            .map_err(|e| RPCError::Network(e))?;
+        let address = self.get_target_address().await.map_err(RPCError::Network)?;
 
         let url = format!("http://{}/raft/vote", address);
 
         match self.client.post(&url).json(&rpc).send().await {
-            Ok(response) => {
-                match response.json::<VoteResponse<NodeId>>().await {
-                    Ok(resp) => {
-                        debug!("Vote response received from node {}", self.target_node_id);
-                        Ok(resp)
-                    }
-                    Err(e) => {
-                        error!("Failed to parse Vote response: {}", e);
-                        Err(RPCError::Network(NetworkError::new(&e)))
-                    }
+            Ok(response) => match response.json::<VoteResponse<NodeId>>().await {
+                Ok(resp) => {
+                    debug!("Vote response received from node {}", self.target_node_id);
+                    Ok(resp)
                 }
-            }
+                Err(e) => {
+                    error!("Failed to parse Vote response: {}", e);
+                    Err(RPCError::Network(NetworkError::new(&e)))
+                }
+            },
             Err(e) => {
                 error!("Failed to send Vote to node {}: {}", self.target_node_id, e);
                 Err(RPCError::Network(NetworkError::new(&e)))
@@ -163,10 +168,16 @@ impl RaftNetwork<TypeConfig> for ConfluxNetwork {
         &mut self,
         _rpc: InstallSnapshotRequest<TypeConfig>,
         _option: RPCOption,
-    ) -> Result<InstallSnapshotResponse<NodeId>, RPCError<NodeId, Node, RaftError<NodeId, InstallSnapshotError>>> {
+    ) -> Result<
+        InstallSnapshotResponse<NodeId>,
+        RPCError<NodeId, Node, RaftError<NodeId, InstallSnapshotError>>,
+    > {
         debug!("Sending InstallSnapshot");
         // For now, return a simple error since we don't have target info
-        let error = std::io::Error::new(std::io::ErrorKind::NotConnected, "Network not implemented yet");
+        let error = std::io::Error::new(
+            std::io::ErrorKind::NotConnected,
+            "Network not implemented yet",
+        );
         Err(RPCError::Network(NetworkError::new(&error)))
     }
 
@@ -182,7 +193,7 @@ impl RaftNetwork<TypeConfig> for ConfluxNetwork {
         Err(StreamingError::Timeout(openraft::error::Timeout {
             action: RPCTypes::InstallSnapshot,
             target: 0, // dummy target
-            id: 0, // dummy id
+            id: 0,     // dummy id
             timeout: Duration::from_secs(10),
         }))
     }

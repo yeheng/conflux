@@ -4,7 +4,7 @@ mod raft;
 
 use anyhow::Result;
 use config::AppConfig;
-use tracing::{info, error};
+use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
@@ -19,7 +19,10 @@ async fn main() -> Result<()> {
     info!("Configuration loaded successfully");
 
     // TODO: Initialize and start the application
-    info!("Conflux server starting on {}:{}", config.server.host, config.server.port);
+    info!(
+        "Conflux server starting on {}:{}",
+        config.server.host, config.server.port
+    );
 
     // Keep the application running
     tokio::signal::ctrl_c().await?;

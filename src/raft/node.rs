@@ -52,7 +52,10 @@ pub struct RaftNode {
 impl RaftNode {
     /// Create a new Raft node
     pub async fn new(config: NodeConfig, app_config: &AppConfig) -> Result<Self> {
-        info!("Creating Raft node {} at {}", config.node_id, config.address);
+        info!(
+            "Creating Raft node {} at {}",
+            config.node_id, config.address
+        );
 
         // Create storage
         let store = Arc::new(Store::new(&app_config.storage.data_dir).await?);
@@ -96,7 +99,10 @@ impl RaftNode {
 
         // For now, create a placeholder Raft instance
         // TODO: Properly initialize openraft::Raft when API is clarified
-        info!("Raft node {} started successfully (placeholder implementation)", self.config.node_id);
+        info!(
+            "Raft node {} started successfully (placeholder implementation)",
+            self.config.node_id
+        );
         Ok(())
     }
 
@@ -109,7 +115,10 @@ impl RaftNode {
     pub async fn client_write(&self, request: ClientRequest) -> Result<ClientWriteResponse> {
         // For MVP, directly apply to store
         // TODO: Route through Raft consensus when properly initialized
-        info!("Processing client write through Raft node {}", self.config.node_id);
+        info!(
+            "Processing client write through Raft node {}",
+            self.config.node_id
+        );
         self.store.apply_command(&request.command).await
     }
 
@@ -152,7 +161,9 @@ impl RaftNode {
         // Check if cluster is empty
         let members = self.members.read().await;
         if members.is_empty() {
-            return Err(crate::error::ConfluxError::raft("Cannot remove last node from cluster"));
+            return Err(crate::error::ConfluxError::raft(
+                "Cannot remove last node from cluster",
+            ));
         }
 
         info!("Node {} removed from cluster successfully", node_id);

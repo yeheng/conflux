@@ -12,20 +12,8 @@ too-many-arguments-threshold = 7
 # Too many lines threshold
 too-many-lines-threshold = 100
 
-# Single char lifetime names threshold
-single-char-lifetime-names-threshold = 4
-
-# Trivial copy pass by ref threshold
-trivial-copy-pass-by-ref-threshold = 256
-
 # Pass by value size limit
 pass-by-value-size-limit = 256
 
 # Max trait bounds
 max-trait-bounds = 3
-
-# Max struct field count
-max-struct-field-count = 20
-
-# Max fn params
-max-fn-params = 7

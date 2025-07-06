@@ -191,12 +191,16 @@ impl AppConfig {
 
         // Validate database configuration
         if self.database.url.is_empty() {
-            return Err(ConfigError::Message("Database URL cannot be empty".to_string()));
+            return Err(ConfigError::Message(
+                "Database URL cannot be empty".to_string(),
+            ));
         }
 
         // Validate security configuration
         if self.security.jwt_secret.is_empty() {
-            return Err(ConfigError::Message("JWT secret cannot be empty".to_string()));
+            return Err(ConfigError::Message(
+                "JWT secret cannot be empty".to_string(),
+            ));
         }
 
         Ok(())

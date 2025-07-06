@@ -3,7 +3,7 @@ use crate::raft::types::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Client interface for interacting with the Raft cluster
 #[derive(Clone)]
@@ -43,10 +43,7 @@ pub enum ReadOperation {
         client_labels: std::collections::BTreeMap<String, String>,
     },
     /// Get configuration version
-    GetConfigVersion {
-        config_id: u64,
-        version_id: u64,
-    },
+    GetConfigVersion { config_id: u64, version_id: u64 },
     /// List configurations in a namespace
     ListConfigs {
         namespace: ConfigNamespace,
@@ -103,16 +100,21 @@ impl RaftClient {
                 name,
                 client_labels,
             } => {
-                let result = self.store.get_published_config(&namespace, &name, &client_labels).await;
-                match result {
-                    Some((config, version)) => Some(serde_json::json!({
+                let result = self
+                    .store
+                    .get_published_config(&namespace, &name, &client_labels)
+                    .await;
+                result.map(|(config, version)| {
+                    serde_json::json!({
                         "config": config,
                         "version": version
-                    })),
-                    None => None,
-                }
+                    })
+                })
             }
-            ReadOperation::GetConfigVersion { config_id, version_id } => {
+            ReadOperation::GetConfigVersion {
+                config_id,
+                version_id,
+            } => {
                 let result = self.store.get_config_version(config_id, version_id).await;
                 result.map(|version| serde_json::json!(version))
             }
@@ -173,7 +175,9 @@ impl RaftClient {
             }
 
             if start.elapsed() > timeout {
-                return Err(crate::error::ConfluxError::raft("Timeout waiting for leader"));
+                return Err(crate::error::ConfluxError::raft(
+                    "Timeout waiting for leader",
+                ));
             }
 
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;

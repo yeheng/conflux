@@ -53,18 +53,23 @@ impl Config {
 
     /// Get the default release (highest priority or fallback)
     pub fn get_default_release(&self) -> Option<&Release> {
-        self.releases.iter()
-            .max_by_key(|r| r.priority)
+        self.releases.iter().max_by_key(|r| r.priority)
     }
 
     /// Find matching release for given client labels
-    pub fn find_matching_release(&self, client_labels: &BTreeMap<String, String>) -> Option<&Release> {
-        let mut matching_releases: Vec<_> = self.releases.iter()
+    pub fn find_matching_release(
+        &self,
+        client_labels: &BTreeMap<String, String>,
+    ) -> Option<&Release> {
+        let mut matching_releases: Vec<_> = self
+            .releases
+            .iter()
             .filter(|release| {
                 // Check if client labels match release labels
-                release.labels.iter().all(|(key, value)| {
-                    client_labels.get(key).map_or(false, |v| v == value)
-                })
+                release
+                    .labels
+                    .iter()
+                    .all(|(key, value)| client_labels.get(key) == Some(value))
             })
             .collect();
 
@@ -156,9 +161,9 @@ impl Release {
 
     /// Check if this release matches the given client labels
     pub fn matches(&self, client_labels: &BTreeMap<String, String>) -> bool {
-        self.labels.iter().all(|(key, value)| {
-            client_labels.get(key).map_or(false, |v| v == value)
-        })
+        self.labels
+            .iter()
+            .all(|(key, value)| client_labels.get(key) == Some(value))
     }
 
     /// Check if this is a default release (no labels)
@@ -194,9 +199,7 @@ pub enum RaftCommand {
         releases: Vec<Release>,
     },
     /// Delete a configuration and all its versions
-    DeleteConfig {
-        config_id: u64,
-    },
+    DeleteConfig { config_id: u64 },
     /// Delete specific versions (for cleanup/GC)
     DeleteVersions {
         config_id: u64,
@@ -229,7 +232,10 @@ impl RaftCommand {
 
     /// Check if this command modifies configuration content
     pub fn modifies_content(&self) -> bool {
-        matches!(self, RaftCommand::CreateConfig { .. } | RaftCommand::CreateVersion { .. })
+        matches!(
+            self,
+            RaftCommand::CreateConfig { .. } | RaftCommand::CreateVersion { .. }
+        )
     }
 
     /// Check if this command modifies release rules

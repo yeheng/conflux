@@ -1,11 +1,13 @@
-pub mod store;
-pub mod types;
+pub mod client;
 pub mod network;
 pub mod node;
-pub mod client;
+pub mod store;
+pub mod types;
 
+pub use client::{
+    ClientReadRequest, ClientReadResponse, ClientWriteRequest, ClusterStatus, RaftClient,
+};
+pub use network::{ConfluxNetwork, ConfluxNetworkFactory, NetworkConfig};
+pub use node::{create_node_config, NodeConfig, RaftNode};
 pub use store::Store;
 pub use types::*;
-pub use network::{ConfluxNetwork, ConfluxNetworkFactory, NetworkConfig};
-pub use node::{RaftNode, NodeConfig, create_node_config};
-pub use client::{RaftClient, ClientWriteRequest, ClientReadRequest, ClientReadResponse, ClusterStatus};
