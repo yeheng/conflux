@@ -4,7 +4,7 @@ mod types;
 mod store;
 mod persistence;
 mod config_ops;
-mod command_handlers;
+mod commands;
 mod delete_handlers;
 mod raft_impl;
 mod raft_storage;
