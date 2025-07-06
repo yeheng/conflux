@@ -648,7 +648,7 @@ pub struct Store {
 | :--------- | :----------------------------------------- | :----------------------------------- | :------------------------------------------------ |
 | `0x01`     | (none)                                     | `last_applied_log` (serialized)      | Stores the last Raft log ID applied to the SM.    |
 | `0x02`     | (none)                                     | `membership` (serialized)            | Stores the current cluster membership config.     |
-| `0x03`     | `tenant/app/env/config_name` (UTF-8 bytes) | `Configuration` (serialized via `bincode` or `prost`) | Stores an individual configuration object. |
+| `0x03`     | `tenant/app/env/config_name` (UTF-8 bytes) | `Configuration` (serialized via `bincode` 2.x) | Stores an individual configuration object. |
 
 这种设计使得我们可以：
 
@@ -697,8 +697,9 @@ impl RaftStateMachine<TypeConfig> for Arc<Store> // TypeConfig is an openraft ge
                         RaftCommand::UpdateConfig(config) => {
                             let key = config.get_key(); // A helper method to create the key string
                             
-                            // Update persistent store
-                            let config_bytes = bincode::serialize(&config).unwrap();
+                            // Update persistent store (using bincode 2.x API)
+                            // Note: config must implement bincode::Encode trait
+                            let config_bytes = bincode::encode_to_vec(&config, bincode::config::standard()).unwrap();
                             batch.put(prefixed_key(0x03, &key), config_bytes);
 
                             // Update in-memory cache
@@ -781,7 +782,7 @@ impl RaftStateMachine<TypeConfig> for Arc<Store> // TypeConfig is an openraft ge
         // Clear old config data (not shown, but would involve iterating and deleting keys)
         // ... then write new data ...
         for (key, config) in &configurations {
-            batch.put(prefixed_key(0x03, key), bincode::serialize(config).unwrap());
+            batch.put(prefixed_key(0x03, key), bincode::encode_to_vec(config, bincode::config::standard()).unwrap());
         }
         batch.put(prefixed_key(0x01, b""), serde_json::to_vec(&last_applied_log).unwrap());
         batch.put(prefixed_key(0x02, b""), serde_json::to_vec(&membership).unwrap());
@@ -1103,8 +1104,8 @@ pub struct Release {
 
 **在 RocksDB 中的存储:**
 
-* `configs/{config_id}` -> `bincode(Config)`
-* `versions/{config_id}/{version_id}` -> `bincode(ConfigVersion)`
+* `configs/{config_id}` -> `bincode::encode_to_vec(Config, config::standard())`
+* `versions/{config_id}/{version_id}` -> `bincode::encode_to_vec(ConfigVersion, config::standard())`
 * 索引: `config_by_name/{namespace}/{name}` -> `config_id` (用于快速查找)
 
 ---

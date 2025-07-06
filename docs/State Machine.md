@@ -104,8 +104,8 @@ impl Store {
 | Key Prefix (u8) | Key Suffix (Bytes) | Value (Serialized Bytes) | Description |
 | :--- | :--- | :--- | :--- |
 | `0x01` | (none) | `(LogId, Membership)` | Raft 核心元数据（最后应用的日志ID，集群成员信息） |
-| `0x02` | `config_id` (u64, big-endian) | `bincode(Config)` | 存储 `Config` 元数据对象 |
-| `0x03` | `config_id` + `version_id` | `bincode(ConfigVersion)` | 存储 `ConfigVersion` 内容对象 |
+| `0x02` | `config_id` (u64, big-endian) | `bincode::encode_to_vec(Config, config::standard())` | 存储 `Config` 元数据对象 |
+| `0x03` | `config_id` + `version_id` | `bincode::encode_to_vec(ConfigVersion, config::standard())` | 存储 `ConfigVersion` 内容对象 |
 | `0x04` | `"namespace/name"` (UTF-8) | `config_id` (u64, big-endian) | **索引**: 从配置名快速查到 `config_id` |
 | `0x05` | `config_id` (u64, big-endian) | `(name, namespace)` | **反向索引**: 从 `config_id` 查回其名称和命名空间 |
 
@@ -114,7 +114,7 @@ impl Store {
 * **前缀分区:** 使用前缀可以高效地对不同类型的数据进行迭代和范围扫描。
 * **二进制 Key:** 对 `config_id` 和 `version_id` 使用 `u64` 的大端字节表示，比字符串 Key 更紧凑，且 RocksDB 的范围扫描性能更好。
 * **索引:** 显式创建索引 (`0x04`) 是必要的，因为 RocksDB 本身不支持二级索引。这避免了在处理请求时进行全表扫描。
-* **序列化:** `bincode` 是一种紧凑、快速的二进制序列化格式，非常适合内部存储。
+* **序列化:** `bincode` 2.x 是一种紧凑、快速的二进制序列化格式，非常适合内部存储。
 
 ##### **b) 内存缓存模型 (In-Memory Cache)**
 
@@ -307,7 +307,7 @@ self.name_to_id_cache.invalidate(&config.name_key()).await;
 * **`rocksdb`**: 底层的持久化存储引擎。
 * **`moka`**: 提供高性能的内存缓存。
 * **`tokio`**: 提供异步运行时和 `RwLock` 等并发原语。
-* **`serde` + `bincode`**: 用于数据的序列化和反序列化。
+* **`serde` + `bincode` 2.x**: 用于数据的序列化和反序列化。
 * **`WatchService`**: 状态机在变更成功后，需要调用它来通知订阅者。
 
 ---

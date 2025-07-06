@@ -101,7 +101,7 @@ pub enum StoreError {
     DbError(#[from] rocksdb::Error),
     
     #[error("Serialization error: {0}")]
-    Serialization(#[from] bincode::Error),
+    Serialization(#[from] bincode::error::DecodeError),
     
     #[error("Raft storage error: {0}")]
     Raft(#[from] openraft::StorageError<NodeId>),
@@ -126,10 +126,10 @@ pub enum StoreError {
 
 | Column Family | Key (Bytes) | Value (Serialized Bytes) | Description |
 | :--- | :--- | :--- | :--- |
-| `cf_default` | `"vote"` (UTF-8) | `bincode(Vote)` | 持久化的 Raft `Vote` |
-| `cf_default` | `"last_purged_log_id"` | `bincode(LogId)` | 最后被快照清除的日志ID |
-| `cf_default` | `"snapshot_meta"` | `bincode(SnapshotMeta)` | 当前快照的元数据 |
-| **`cf_logs`** | `index` (u64, big-endian) | `bincode(Entry)` | **Raft 日志**: Key 是日志索引 |
+| `cf_default` | `"vote"` (UTF-8) | `bincode::encode_to_vec(Vote, config::standard())` | 持久化的 Raft `Vote` |
+| `cf_default` | `"last_purged_log_id"` | `bincode::encode_to_vec(LogId, config::standard())` | 最后被快照清除的日志ID |
+| `cf_default` | `"snapshot_meta"` | `bincode::encode_to_vec(SnapshotMeta, config::standard())` | 当前快照的元数据 |
+| **`cf_logs`** | `index` (u64, big-endian) | `bincode::encode_to_vec(Entry, config::standard())` | **Raft 日志**: Key 是日志索引 |
 | **`cf_state_machine`** | (见状态机模块设计中的前缀) | (应用数据) | **状态机数据**: 使用 `0x02`, `0x03` 等前缀 |
 
 **设计理由:**
@@ -153,7 +153,7 @@ sequenceDiagram
     Store->>Store: Create a new WriteBatch
     loop for each entry
         Store->>Store: Key = entry.log_id.index (as u64_be)
-        Store->>Store: Value = bincode::serialize(entry)
+        Store->>Store: Value = bincode::encode_to_vec(entry, config::standard())
         Store->>Store: batch.put_cf(cf_logs, Key, Value)
     end
     Store->>RocksDB: db.write(batch)
@@ -270,7 +270,7 @@ pub fn test_raft_storage_compliance() {
 
 * **`rocksdb`**: 底层 K/V 存储引擎。
 * **`openraft`**: `Store` 模块是其 `RaftStorage` trait 的实现者。
-* **`serde` + `bincode`**: 用于所有数据的序列化。
+* **`serde` + `bincode` 2.x**: 用于所有数据的序列化。
 * **State Machine 模块**: `Store` 同时也是状态机，其 `apply` 逻辑依赖于状态机模块的设计。
 
 ---
