@@ -11,7 +11,7 @@ pub mod helpers;
 mod tests;
 
 pub use types::*;
-pub use helpers::*;
+// pub use helpers::*; // Commented out until needed
 
 /// Client interface for interacting with the Raft cluster
 #[derive(Clone)]

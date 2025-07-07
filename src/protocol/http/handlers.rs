@@ -1,6 +1,6 @@
 use crate::protocol::http::{AppState, CreateVersionRequest, UpdateReleasesRequest, FetchConfigResponse};
 use crate::raft::types::*;
-use crate::raft::client::{create_write_request, create_get_config_request};
+use crate::raft::client::helpers::{create_write_request, create_get_config_request};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

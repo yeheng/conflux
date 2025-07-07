@@ -15,6 +15,7 @@ Conflux 的认证授权系统提供了以下核心功能：
 ## 架构组件
 
 ### 1. AuthzService
+
 核心授权服务，封装了 Casbin Enforcer：
 
 ```rust
@@ -30,6 +31,7 @@ let allowed = authz_service
 ```
 
 ### 2. 中间件
+
 Axum 中间件，自动进行权限检查：
 
 ```rust
@@ -41,6 +43,7 @@ let app = Router::new()
 ```
 
 ### 3. 管理 API
+
 REST API 端点用于管理权限和角色：
 
 ```rust
@@ -208,6 +211,7 @@ let app = Router::new()
 ## API 端点
 
 ### 权限检查
+
 ```
 POST /_auth/check
 Content-Type: application/json
@@ -221,6 +225,7 @@ Content-Type: application/json
 ```
 
 ### 角色管理
+
 ```
 GET /tenants/{tenant}/users/{user_id}/roles
 POST /tenants/{tenant}/users/{user_id}/roles
@@ -228,12 +233,14 @@ DELETE /tenants/{tenant}/users/{user_id}/roles/{role}
 ```
 
 ### 权限管理
+
 ```
 POST /tenants/{tenant}/roles/{role}/permissions
 DELETE /tenants/{tenant}/roles/{role}/permissions
 ```
 
 ### 策略重新加载
+
 ```
 POST /_auth/reload
 ```
@@ -241,11 +248,13 @@ POST /_auth/reload
 ## 测试
 
 运行单元测试：
+
 ```bash
 cargo test --lib
 ```
 
 运行演示程序（需要 PostgreSQL）：
+
 ```bash
 # 启动 PostgreSQL
 docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=password postgres
@@ -288,6 +297,7 @@ url = "postgresql://username:password@localhost:5432/conflux"
 ### 调试
 
 启用详细日志：
+
 ```rust
 tracing_subscriber::fmt()
     .with_max_level(tracing::Level::DEBUG)

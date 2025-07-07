@@ -1,5 +1,6 @@
 use crate::auth::AuthzService;
-use crate::raft::{RaftClient, Store};
+use crate::raft::client::RaftClient;
+use crate::raft::store::Store;
 use std::sync::Arc;
 
 /// 核心应用句柄，封装了所有核心服务的引用

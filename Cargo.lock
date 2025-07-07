@@ -631,6 +631,7 @@ dependencies = [
  "chrono",
  "config",
  "dashmap",
+ "fastrand",
  "num_cpus",
  "openraft",
  "reqwest",

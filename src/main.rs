@@ -4,7 +4,7 @@ mod raft;
 
 use anyhow::Result;
 use config::AppConfig;
-use tracing::{error, info};
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]

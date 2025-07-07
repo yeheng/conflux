@@ -94,11 +94,11 @@ impl ProtocolManager {
         
         for plugin in &self.plugins {
             let plugin_name = plugin.name();
-            let config = self.configs.get(plugin_name)
+            let _config = self.configs.get(plugin_name)
                 .cloned()
                 .unwrap_or_default();
-            
-            let core_handle_clone = core_handle.clone();
+
+            let _core_handle_clone = core_handle.clone();
             let plugin_name_owned = plugin_name.to_string();
             
             // 为每个插件创建一个独立的任务
@@ -140,9 +140,9 @@ impl Default for ProtocolManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raft::{RaftClient, Store};
-    use std::sync::Arc;
-    use tempfile::TempDir;
+    // use crate::raft::{RaftClient, Store}; // Commented out until needed
+    // use std::sync::Arc; // Commented out until needed
+    // use tempfile::TempDir; // Commented out until needed
 
     // 测试用的协议插件实现
     struct TestProtocol {

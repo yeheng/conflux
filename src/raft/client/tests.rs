@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use crate::raft::client::helpers::{create_write_request, create_get_config_request};
     use crate::raft::store::Store;
     use std::collections::BTreeMap;
     use std::sync::Arc;

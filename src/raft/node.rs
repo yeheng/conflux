@@ -98,33 +98,26 @@ impl RaftNode {
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting Raft node {}", self.config.node_id);
 
-        // TODO: Initialize Raft instance
-        // This requires implementing RaftLogStorage trait for Store
-        // For now, we keep the placeholder implementation
-
-        // Create storage adaptor for openraft
-        // let storage = openraft::storage::Adaptor::new(self.store.clone());
-
         // Create network factory
-        // let network_factory = self.network_factory.read().await.clone();
+        let _network_factory = self.network_factory.read().await.clone();
 
-        // Initialize Raft instance
-        // let raft = openraft::Raft::new(
-        //     self.config.node_id,
-        //     Arc::new(self.config.raft_config.clone()),
-        //     network_factory,
-        //     log_store,
-        //     state_machine,
-        // ).await.map_err(|e| {
-        //     crate::error::ConfluxError::raft(format!("Failed to initialize Raft: {}", e))
-        // })?;
+        // TODO: Complete Raft instance initialization
+        // The openraft 0.9 API requires specific trait implementations
+        // Current Store implements RaftStorage but needs RaftLogStorage and RaftStateMachine
+        // This will be completed in the next iteration
 
+        // For now, we'll skip the Raft initialization to allow other components to work
+        // let log_store = Adaptor::new(self.store.clone());
+        // let state_machine = Adaptor::new(self.store.clone());
+        // let raft = openraft::Raft::new(...).await?;
         // self.raft = Some(raft);
 
+        // self.raft = Some(raft); // Will be uncommented when Raft initialization is complete
+
         // Initialize single-node cluster if needed
-        // if self.is_single_node_cluster().await {
-        //     self.initialize_cluster().await?;
-        // }
+        if self.is_single_node_cluster().await {
+            self.initialize_cluster().await?;
+        }
 
         info!("Raft node {} started successfully", self.config.node_id);
         Ok(())
@@ -313,3 +306,8 @@ pub fn create_node_config(node_id: NodeId, address: String) -> NodeConfig {
         network_config: NetworkConfig::default(),
     }
 }
+
+// Include tests
+#[cfg(test)]
+#[path = "node_tests.rs"]
+mod node_tests;

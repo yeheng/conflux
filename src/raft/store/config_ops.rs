@@ -160,6 +160,14 @@ impl Store {
         creator_id: &u64,
         description: &str,
     ) -> Result<ClientWriteResponse> {
+        // Check if config already exists
+        if self.config_exists(namespace, name).await {
+            return Ok(Self::create_error_response(format!(
+                "Configuration '{}' already exists in namespace {}:{}:{}",
+                name, namespace.tenant, namespace.app, namespace.env
+            )));
+        }
+
         let config_id = {
             let mut next_id = self.next_config_id.write().await;
             let id = *next_id;

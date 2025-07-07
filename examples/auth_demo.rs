@@ -1,5 +1,6 @@
 use conflux::auth::{AuthzService, actions, roles, ResourcePath};
 use std::sync::Arc;
+use tracing_subscriber::fmt::init;
 
 /// 演示认证授权系统的基本功能
 /// 
@@ -11,7 +12,7 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
-    tracing_subscriber::init();
+    init();
     
     println!("🚀 Conflux 认证授权系统演示");
     println!("================================");
