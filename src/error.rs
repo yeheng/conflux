@@ -36,6 +36,9 @@ pub enum ConfluxError {
     #[error("Authorization error: {0}")]
     Authz(String),
 
+    #[error("Auth error: {0}")]
+    AuthError(String),
+
     #[error("Validation error: {0}")]
     Validation(String),
 

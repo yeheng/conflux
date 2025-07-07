@@ -30,3 +30,15 @@ openraft::declare_raft_types!(
 
 /// Type alias for the Raft instance
 pub type ConfluxRaft = Raft<TypeConfig>;
+
+/// Raft metrics for monitoring and debugging
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RaftMetrics {
+    pub node_id: NodeId,
+    pub current_term: u64,
+    pub last_log_index: u64,
+    pub last_applied: u64,
+    pub leader_id: Option<NodeId>,
+    pub membership: std::collections::BTreeSet<NodeId>,
+    pub is_leader: bool,
+}

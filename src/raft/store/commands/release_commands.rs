@@ -9,48 +9,24 @@ impl Store {
         config_id: &u64,
         releases: &[Release],
     ) -> Result<ClientWriteResponse> {
-        // Find the config by ID
-        let config_key = {
-            let configs = self.configurations.read().await;
-            configs
-                .iter()
-                .find(|(_, config)| config.id == *config_id)
-                .map(|(key, _)| key.clone())
-        };
-
-        let config_key = match config_key {
-            Some(key) => key,
-            None => {
-                return Ok(ClientWriteResponse {
-                    success: false,
-                    message: format!("Configuration with ID {} not found", config_id),
-                    data: None,
-                })
+        // Find the config by ID using the new helper method
+        let (config_key, config) = match self.find_config_by_id(*config_id).await {
+            Ok((key, config)) => (key, config),
+            Err(_) => {
+                return Ok(Self::create_error_response(format!(
+                    "Configuration with ID {} not found",
+                    config_id
+                )));
             }
         };
 
-        // Validate release rules
+        // Validate release rules - check if all referenced versions exist
         for release in releases {
-            // Check if the version exists
-            let version_exists = {
-                let versions = self.versions.read().await;
-                versions
-                    .get(config_id)
-                    .map(|config_versions| {
-                        config_versions.contains_key(&release.version_id)
-                    })
-                    .unwrap_or(false)
-            };
-
-            if !version_exists {
-                return Ok(ClientWriteResponse {
-                    success: false,
-                    message: format!(
-                        "Version {} does not exist for config {}",
-                        release.version_id, config_id
-                    ),
-                    data: None,
-                });
+            if let Err(_) = self.validate_version_exists(*config_id, release.version_id).await {
+                return Ok(Self::create_error_response(format!(
+                    "Version {} does not exist for config {}",
+                    release.version_id, config_id
+                )));
             }
         }
 
@@ -60,47 +36,30 @@ impl Store {
             if let Some(config) = configs.get_mut(&config_key) {
                 config.releases = releases.to_vec();
                 config.updated_at = chrono::Utc::now();
+                // Persist the updated config to RocksDB
+                if let Err(e) = self.persist_config(&config_key, config).await {
+                    return Ok(Self::create_error_response(format!(
+                        "Failed to persist config update: {}", e
+                    )));
+                }
             }
         }
 
-        // Send notification
-        let (namespace, name) = {
-            let configs = self.configurations.read().await;
-            configs
-                .get(&config_key)
-                .map(|c| (c.namespace.clone(), c.name.clone()))
-                .unwrap_or_else(|| {
-                    let parts: Vec<&str> = config_key.split('/').collect();
-                    let name = parts
-                        .last()
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| "unknown".to_string());
-                    (
-                        ConfigNamespace {
-                            tenant: "unknown".to_string(),
-                            app: "unknown".to_string(),
-                            env: "unknown".to_string(),
-                        },
-                        name,
-                    )
-                })
-        };
-
+        // Send notification using config info we already have
         let _ = self.change_notifier.send(ConfigChangeEvent {
             config_id: *config_id,
-            namespace,
-            name,
+            namespace: config.namespace.clone(),
+            name: config.name.clone(),
             version_id: 0, // No specific version for release rule updates
             change_type: ConfigChangeType::ReleaseUpdated,
         });
 
-        Ok(ClientWriteResponse {
-            success: true,
-            message: "Release rules updated successfully".to_string(),
-            data: Some(serde_json::json!({
+        Ok(Self::create_success_response(
+            "Release rules updated successfully".to_string(),
+            Some(serde_json::json!({
                 "config_id": config_id,
                 "release_count": releases.len()
             })),
-        })
+        ))
     }
 }

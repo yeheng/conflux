@@ -183,8 +183,8 @@ impl Store {
 
         // Persist to RocksDB and update in-memory state
         let config_name_key = make_config_key(namespace, name);
-        self.persist_config(&config_name_key, &config)?;
-        self.persist_version(&version)?;
+        self.persist_config(&config_name_key, &config).await?;
+        self.persist_version(&version).await?;
 
         self.configurations
             .write()

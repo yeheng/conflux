@@ -8,6 +8,7 @@ use crate::raft::{
 use openraft::Config as RaftConfig;
 use std::collections::BTreeSet;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
@@ -97,10 +98,20 @@ impl RaftNode {
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting Raft node {}", self.config.node_id);
 
-        // For now, create a placeholder Raft instance
-        // TODO: Properly initialize openraft::Raft when API is clarified
+        // TODO: Properly initialize openraft::Raft instance
+        // This requires implementing RaftLogStorage and RaftStateMachine traits for Store
+        // The current Store implementation only has RaftStorage which is insufficient
+        // 
+        // Required steps for full Raft integration:
+        // 1. Implement RaftLogStorage trait for Store
+        // 2. Implement RaftStateMachine trait for Store  
+        // 3. Create proper adaptors using openraft::storage::Adaptor
+        // 4. Initialize Raft with: openraft::Raft::new(node_id, config, network, log_store, state_machine)
+        //
+        // For now, we document this limitation and keep the placeholder implementation
+
         info!(
-            "Raft node {} started successfully (placeholder implementation)",
+            "Raft node {} started (note: full Raft consensus not yet implemented)",
             self.config.node_id
         );
         Ok(())
@@ -170,18 +181,90 @@ impl RaftNode {
         Ok(())
     }
 
-    /// Check if this node is the leader (placeholder implementation)
+    /// Check if this node is the leader
     pub async fn is_leader(&self) -> bool {
-        // For now, assume the first node is always the leader
-        let members = self.members.read().await;
-        members.iter().next() == Some(&self.config.node_id)
+        if let Some(ref raft) = self.raft {
+            // TODO: Use real Raft instance when available
+            // raft.is_leader().await
+            
+            // For now, use simple logic based on node ID
+            let members = self.members.read().await;
+            members.iter().next() == Some(&self.config.node_id)
+        } else {
+            false
+        }
     }
 
-    /// Get current leader ID (placeholder implementation)
+    /// Get current leader ID
     pub async fn get_leader(&self) -> Option<NodeId> {
-        // For now, return the first node as leader
-        let members = self.members.read().await;
-        members.iter().next().copied()
+        if let Some(ref raft) = self.raft {
+            // TODO: Use real Raft instance when available
+            // raft.current_leader().await
+            
+            // For now, return the first node as leader
+            let members = self.members.read().await;
+            members.iter().next().copied()
+        } else {
+            None
+        }
+    }
+
+    /// Get current Raft metrics
+    pub async fn get_metrics(&self) -> Result<RaftMetrics> {
+        if let Some(ref _raft) = self.raft {
+            // TODO: Get real metrics from Raft instance
+            // raft.metrics().borrow().clone()
+            
+            // For now, return placeholder metrics
+            Ok(RaftMetrics {
+                node_id: self.config.node_id,
+                current_term: 1,
+                last_log_index: 0,
+                last_applied: 0,
+                leader_id: self.get_leader().await,
+                membership: self.get_members().await,
+                is_leader: self.is_leader().await,
+            })
+        } else {
+            Err(crate::error::ConfluxError::raft("Raft not initialized"))
+        }
+    }
+
+    /// Wait for leadership
+    pub async fn wait_for_leadership(&self, timeout: Duration) -> Result<()> {
+        let start = std::time::Instant::now();
+        
+        while start.elapsed() < timeout {
+            if self.is_leader().await {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        
+        Err(crate::error::ConfluxError::raft("Timeout waiting for leadership"))
+    }
+
+    /// Change membership (add/remove nodes)
+    pub async fn change_membership(&self, new_members: BTreeSet<NodeId>) -> Result<()> {
+        if !self.is_leader().await {
+            return Err(crate::error::ConfluxError::raft("Only leader can change membership"));
+        }
+
+        info!("Changing cluster membership to: {:?}", new_members);
+
+        // Update local membership
+        {
+            let mut members = self.members.write().await;
+            *members = new_members;
+        }
+
+        // TODO: Use real Raft membership change when available
+        // if let Some(ref raft) = self.raft {
+        //     raft.change_membership(new_members, false).await?;
+        // }
+
+        info!("Membership change completed");
+        Ok(())
     }
 }
 

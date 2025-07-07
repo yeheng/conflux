@@ -97,6 +97,72 @@ impl ConfluxNetwork {
                 NetworkError::new(&err)
             })
     }
+
+    /// Send request with retry mechanism
+    async fn send_with_retry<T, R>(&self, url: &str, request: &T) -> Result<R, NetworkError>
+    where
+        T: serde::Serialize,
+        R: serde::de::DeserializeOwned,
+    {
+        let max_attempts = 3;
+        let mut delay = Duration::from_millis(100);
+
+        for attempt in 1..=max_attempts {
+            match self.client.post(url).json(request).send().await {
+                Ok(response) => match response.json::<R>().await {
+                    Ok(data) => return Ok(data),
+                    Err(e) => {
+                        error!("Failed to parse response (attempt {}/{}): {}", attempt, max_attempts, e);
+                        if attempt == max_attempts {
+                            return Err(NetworkError::new(&e));
+                        }
+                    }
+                },
+                Err(e) => {
+                    error!("Failed to send request (attempt {}/{}): {}", attempt, max_attempts, e);
+                    if attempt == max_attempts {
+                        return Err(NetworkError::new(&e));
+                    }
+                }
+            }
+
+            // Exponential backoff
+            tokio::time::sleep(delay).await;
+            delay *= 2;
+        }
+
+        unreachable!()
+    }
+
+    /// Check if target node is reachable
+    pub async fn is_reachable(&self) -> bool {
+        if let Ok(address) = self.get_target_address().await {
+            let url = format!("http://{}/health", address);
+            match self.client.get(&url).send().await {
+                Ok(response) => response.status().is_success(),
+                Err(_) => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Get connection statistics
+    pub async fn get_connection_stats(&self) -> ConnectionStats {
+        ConnectionStats {
+            target_node_id: self.target_node_id,
+            is_reachable: self.is_reachable().await,
+            timeout_secs: self.config.timeout_secs,
+        }
+    }
+}
+
+/// Connection statistics
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ConnectionStats {
+    pub target_node_id: NodeId,
+    pub is_reachable: bool,
+    pub timeout_secs: u64,
 }
 
 impl RaftNetwork<TypeConfig> for ConfluxNetwork {
@@ -166,19 +232,34 @@ impl RaftNetwork<TypeConfig> for ConfluxNetwork {
 
     async fn install_snapshot(
         &mut self,
-        _rpc: InstallSnapshotRequest<TypeConfig>,
+        rpc: InstallSnapshotRequest<TypeConfig>,
         _option: RPCOption,
     ) -> Result<
         InstallSnapshotResponse<NodeId>,
         RPCError<NodeId, Node, RaftError<NodeId, InstallSnapshotError>>,
     > {
-        debug!("Sending InstallSnapshot");
-        // For now, return a simple error since we don't have target info
-        let error = std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "Network not implemented yet",
-        );
-        Err(RPCError::Network(NetworkError::new(&error)))
+        debug!("Sending InstallSnapshot to node {}", self.target_node_id);
+
+        let address = self.get_target_address().await.map_err(RPCError::Network)?;
+        let url = format!("http://{}/raft/install_snapshot", address);
+
+        // Send the snapshot installation request
+        match self.client.post(&url).json(&rpc).send().await {
+            Ok(response) => match response.json::<InstallSnapshotResponse<NodeId>>().await {
+                Ok(resp) => {
+                    debug!("InstallSnapshot response received from node {}", self.target_node_id);
+                    Ok(resp)
+                }
+                Err(e) => {
+                    error!("Failed to parse InstallSnapshot response: {}", e);
+                    Err(RPCError::Network(NetworkError::new(&e)))
+                }
+            },
+            Err(e) => {
+                error!("Failed to send InstallSnapshot to node {}: {}", self.target_node_id, e);
+                Err(RPCError::Network(NetworkError::new(&e)))
+            }
+        }
     }
 
     async fn full_snapshot(

@@ -13,23 +13,14 @@ impl Store {
         creator_id: &u64,
         description: &str,
     ) -> Result<ClientWriteResponse> {
-        // Check if config exists
-        let config_key = {
-            let configs = self.configurations.read().await;
-            configs
-                .iter()
-                .find(|(_, config)| config.id == *config_id)
-                .map(|(key, _)| key.clone())
-        };
-
-        let config_key = match config_key {
-            Some(key) => key,
-            None => {
-                return Ok(ClientWriteResponse {
-                    success: false,
-                    message: format!("Configuration with ID {} not found", config_id),
-                    data: None,
-                })
+        // Check if config exists using the new helper method
+        let (config_key, existing_config) = match self.find_config_by_id(*config_id).await {
+            Ok((key, config)) => (key, config),
+            Err(_) => {
+                return Ok(Self::create_error_response(format!(
+                    "Configuration with ID {} not found",
+                    config_id
+                )));
             }
         };
 
@@ -46,18 +37,14 @@ impl Store {
             fmt.clone()
         } else {
             // Use the format from the config's latest version or default to JSON
-            let configs = self.configurations.read().await;
-            let default_format = configs
-                .get(&config_key)
-                .and_then(|config| {
-                    let versions = self.versions.try_read().ok()?;
-                    versions
-                        .get(&config.id)?
-                        .get(&config.latest_version_id)
-                        .map(|v| v.format.clone())
+            let versions = self.versions.read().await;
+            let default_format = versions
+                .get(config_id)
+                .and_then(|config_versions| {
+                    config_versions.get(&existing_config.latest_version_id)
                 })
+                .map(|v| v.format.clone())
                 .unwrap_or(ConfigFormat::Json);
-            drop(configs);
             default_format
         };
 
@@ -72,7 +59,11 @@ impl Store {
         );
 
         // Persist version and update config's latest_version_id
-        self.persist_version(&version)?;
+        if let Err(e) = self.persist_version(&version).await {
+            return Ok(Self::create_error_response(format!(
+                "Failed to persist version: {}", e
+            )));
+        }
 
         {
             let mut configs = self.configurations.write().await;
@@ -80,7 +71,11 @@ impl Store {
                 config.latest_version_id = version_id;
                 config.updated_at = chrono::Utc::now();
                 // Persist updated config
-                self.persist_config(&config_key, config)?;
+                if let Err(e) = self.persist_config(&config_key, config).await {
+                    return Ok(Self::create_error_response(format!(
+                        "Failed to persist config update: {}", e
+                    )));
+                }
             }
         }
 
@@ -93,34 +88,21 @@ impl Store {
                 .insert(version_id, version);
         }
 
-        // Send notification
-        let namespace = {
-            let configs = self.configurations.read().await;
-            configs.get(&config_key).map(|c| c.namespace.clone())
-        };
+        // Send notification using config info we already have
+        let _ = self.change_notifier.send(ConfigChangeEvent {
+            config_id: *config_id,
+            namespace: existing_config.namespace.clone(),
+            name: existing_config.name.clone(),
+            version_id,
+            change_type: ConfigChangeType::Updated,
+        });
 
-        if let Some(namespace) = namespace {
-            let name = config_key
-                .split('/')
-                .next_back()
-                .unwrap_or("unknown")
-                .to_string();
-            let _ = self.change_notifier.send(ConfigChangeEvent {
-                config_id: *config_id,
-                namespace,
-                name,
-                version_id,
-                change_type: ConfigChangeType::Updated,
-            });
-        }
-
-        Ok(ClientWriteResponse {
-            success: true,
-            message: "Configuration version created successfully".to_string(),
-            data: Some(serde_json::json!({
+        Ok(Self::create_success_response(
+            "Configuration version created successfully".to_string(),
+            Some(serde_json::json!({
                 "config_id": config_id,
                 "version_id": version_id
             })),
-        })
+        ))
     }
 }

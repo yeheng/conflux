@@ -43,6 +43,41 @@ impl RaftClient {
         Ok(response)
     }
 
+    /// Submit a write request with automatic leader detection
+    pub async fn write_with_leader_detection(&self, request: ClientWriteRequest) -> Result<ClientWriteResponse> {
+        // Check if we know the current leader
+        let leader_id = self.current_leader.read().await;
+        
+        if leader_id.is_none() {
+            return Err(crate::error::ConfluxError::raft("No leader available"));
+        }
+
+        // For now, just use the local store (same as write method)
+        // TODO: Implement actual leader detection and request forwarding
+        self.write(request).await
+    }
+
+    /// Batch write multiple requests
+    pub async fn batch_write(&self, requests: Vec<ClientWriteRequest>) -> Result<Vec<ClientWriteResponse>> {
+        info!("Processing batch write with {} requests", requests.len());
+        
+        let mut responses = Vec::with_capacity(requests.len());
+        
+        for request in requests {
+            match self.write(request).await {
+                Ok(response) => responses.push(response),
+                Err(e) => {
+                    // For batch operations, we could either fail fast or continue
+                    // For now, we fail fast
+                    return Err(e);
+                }
+            }
+        }
+        
+        debug!("Batch write completed successfully");
+        Ok(responses)
+    }
+
     /// Submit a read request to the cluster
     pub async fn read(&self, request: ClientReadRequest) -> Result<ClientReadResponse> {
         debug!("Processing client read request: {:?}", request.operation);

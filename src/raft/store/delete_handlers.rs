@@ -8,46 +8,15 @@ impl Store {
         &self,
         config_id: &u64,
     ) -> Result<ClientWriteResponse> {
-        // Find the config by ID
-        let config_key = {
-            let configs = self.configurations.read().await;
-            configs
-                .iter()
-                .find(|(_, config)| config.id == *config_id)
-                .map(|(key, _)| key.clone())
-        };
-
-        let config_key = match config_key {
-            Some(key) => key,
-            None => {
-                return Ok(ClientWriteResponse {
-                    success: false,
-                    message: format!("Configuration with ID {} not found", config_id),
-                    data: None,
-                })
+        // Find the config by ID using the new helper method
+        let (config_key, config) = match self.find_config_by_id(*config_id).await {
+            Ok((key, config)) => (key, config),
+            Err(_) => {
+                return Ok(Self::create_error_response(format!(
+                    "Configuration with ID {} not found",
+                    config_id
+                )));
             }
-        };
-
-        // Get config info for notification
-        let (namespace, name) = {
-            let configs = self.configurations.read().await;
-            configs
-                .get(&config_key)
-                .map(|c| (c.namespace.clone(), c.name.clone()))
-                .unwrap_or_else(|| {
-                    let parts: Vec<&str> = config_key.split('/').collect();
-                    let name = parts
-                        .last()
-                        .map_or("unknown".to_string(), |s| s.to_string());
-                    (
-                        ConfigNamespace {
-                            tenant: "unknown".to_string(),
-                            app: "unknown".to_string(),
-                            env: "unknown".to_string(),
-                        },
-                        name,
-                    )
-                })
         };
 
         // Remove config and all its versions
@@ -64,22 +33,21 @@ impl Store {
             name_index.remove(&config_key);
         }
 
-        // Send notification
+        // Send notification using config info we already have
         let _ = self.change_notifier.send(ConfigChangeEvent {
             config_id: *config_id,
-            namespace,
-            name,
+            namespace: config.namespace.clone(),
+            name: config.name.clone(),
             version_id: 0,
             change_type: ConfigChangeType::Deleted,
         });
 
-        Ok(ClientWriteResponse {
-            success: true,
-            message: "Configuration deleted successfully".to_string(),
-            data: Some(serde_json::json!({
+        Ok(Self::create_success_response(
+            "Configuration deleted successfully".to_string(),
+            Some(serde_json::json!({
                 "config_id": config_id
             })),
-        })
+        ))
     }
 
     /// Handle delete versions command
@@ -88,19 +56,16 @@ impl Store {
         config_id: &u64,
         version_ids: &[u64],
     ) -> Result<ClientWriteResponse> {
-        // Check if config exists
-        let config_exists = {
-            let configs = self.configurations.read().await;
-            configs.iter().any(|(_, config)| config.id == *config_id)
+        // Check if config exists using the new helper method
+        let _config = match self.find_config_by_id(*config_id).await {
+            Ok((_, config)) => config,
+            Err(_) => {
+                return Ok(Self::create_error_response(format!(
+                    "Configuration with ID {} not found",
+                    config_id
+                )));
+            }
         };
-
-        if !config_exists {
-            return Ok(ClientWriteResponse {
-                success: false,
-                message: format!("Configuration with ID {} not found", config_id),
-                data: None,
-            });
-        }
 
         // Remove specified versions
         let mut deleted_count = 0;
@@ -115,13 +80,12 @@ impl Store {
             }
         }
 
-        Ok(ClientWriteResponse {
-            success: true,
-            message: format!("Deleted {} versions successfully", deleted_count),
-            data: Some(serde_json::json!({
+        Ok(Self::create_success_response(
+            format!("Deleted {} versions successfully", deleted_count),
+            Some(serde_json::json!({
                 "config_id": config_id,
                 "deleted_count": deleted_count
             })),
-        })
+        ))
     }
 }
