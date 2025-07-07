@@ -1,5 +1,7 @@
+use crate::raft::{ConfigFormat, Release};
+
+use super::config::ConfigNamespace;
 use serde::{Deserialize, Serialize};
-use super::config::{ConfigNamespace, ConfigFormat, Release};
 
 /// Raft command enumeration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,6 +16,16 @@ pub enum RaftCommand {
         creator_id: u64,
         description: String,
     },
+    /// Update an existing configuration
+    UpdateConfig {
+        config_id: u64,
+        namespace: ConfigNamespace,
+        name: String,
+        content: Vec<u8>,
+        format: ConfigFormat,
+        schema: Option<String>,
+        description: String,
+    },
     /// Create a new version for an existing configuration
     CreateVersion {
         config_id: u64,
@@ -22,17 +34,17 @@ pub enum RaftCommand {
         creator_id: u64,
         description: String,
     },
-    /// Update release rules for a configuration
-    UpdateReleaseRules {
-        config_id: u64,
-        releases: Vec<Release>,
-    },
+    /// Release a specific version
+    ReleaseVersion { config_id: u64, version_id: u64 },
     /// Delete a configuration and all its versions
     DeleteConfig { config_id: u64 },
-    /// Delete specific versions (for cleanup/GC)
     DeleteVersions {
         config_id: u64,
         version_ids: Vec<u64>,
+    },
+    UpdateReleaseRules {
+        config_id: u64,
+        releases: Vec<Release>,
     },
 }
 
@@ -45,6 +57,8 @@ impl RaftCommand {
             RaftCommand::UpdateReleaseRules { config_id, .. } => Some(*config_id),
             RaftCommand::DeleteConfig { config_id } => Some(*config_id),
             RaftCommand::DeleteVersions { config_id, .. } => Some(*config_id),
+            RaftCommand::UpdateConfig { config_id, .. } => Some(*config_id),
+            RaftCommand::ReleaseVersion { config_id, .. } => Some(*config_id),
         }
     }
 
@@ -56,6 +70,8 @@ impl RaftCommand {
             RaftCommand::UpdateReleaseRules { .. } => None,
             RaftCommand::DeleteConfig { .. } => None,
             RaftCommand::DeleteVersions { .. } => None,
+            RaftCommand::UpdateConfig { .. } => None,
+            RaftCommand::ReleaseVersion { .. } => None,
         }
     }
 
@@ -63,13 +79,18 @@ impl RaftCommand {
     pub fn modifies_content(&self) -> bool {
         matches!(
             self,
-            RaftCommand::CreateConfig { .. } | RaftCommand::CreateVersion { .. }
+            RaftCommand::CreateConfig { .. }
+                | RaftCommand::CreateVersion { .. }
+                | RaftCommand::UpdateConfig { .. }
         )
     }
 
     /// Check if this command modifies release rules
     pub fn modifies_releases(&self) -> bool {
-        matches!(self, RaftCommand::UpdateReleaseRules { .. })
+        matches!(
+            self,
+            RaftCommand::UpdateReleaseRules { .. } | RaftCommand::ReleaseVersion { .. }
+        )
     }
 }
 
@@ -82,7 +103,19 @@ pub struct ClientRequest {
 /// Client response for write operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientWriteResponse {
+    pub config_id: Option<u64>,
     pub success: bool,
     pub message: String,
     pub data: Option<serde_json::Value>,
+}
+
+impl Default for ClientWriteResponse {
+    fn default() -> Self {
+        Self {
+            config_id: None,
+            success: false,
+            message: "No operation performed".to_string(),
+            data: None,
+        }
+    }
 }

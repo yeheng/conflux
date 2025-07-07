@@ -177,7 +177,7 @@ fn generate_request_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{HeaderValue, Method, Uri};
+    use axum::http::{HeaderValue};
 
     #[test]
     fn test_extract_client_ip() {

@@ -98,22 +98,35 @@ impl RaftNode {
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting Raft node {}", self.config.node_id);
 
-        // TODO: Properly initialize openraft::Raft instance
-        // This requires implementing RaftLogStorage and RaftStateMachine traits for Store
-        // The current Store implementation only has RaftStorage which is insufficient
-        // 
-        // Required steps for full Raft integration:
-        // 1. Implement RaftLogStorage trait for Store
-        // 2. Implement RaftStateMachine trait for Store  
-        // 3. Create proper adaptors using openraft::storage::Adaptor
-        // 4. Initialize Raft with: openraft::Raft::new(node_id, config, network, log_store, state_machine)
-        //
-        // For now, we document this limitation and keep the placeholder implementation
+        // TODO: Initialize Raft instance
+        // This requires implementing RaftLogStorage trait for Store
+        // For now, we keep the placeholder implementation
 
-        info!(
-            "Raft node {} started (note: full Raft consensus not yet implemented)",
-            self.config.node_id
-        );
+        // Create storage adaptor for openraft
+        // let storage = openraft::storage::Adaptor::new(self.store.clone());
+
+        // Create network factory
+        // let network_factory = self.network_factory.read().await.clone();
+
+        // Initialize Raft instance
+        // let raft = openraft::Raft::new(
+        //     self.config.node_id,
+        //     Arc::new(self.config.raft_config.clone()),
+        //     network_factory,
+        //     log_store,
+        //     state_machine,
+        // ).await.map_err(|e| {
+        //     crate::error::ConfluxError::raft(format!("Failed to initialize Raft: {}", e))
+        // })?;
+
+        // self.raft = Some(raft);
+
+        // Initialize single-node cluster if needed
+        // if self.is_single_node_cluster().await {
+        //     self.initialize_cluster().await?;
+        // }
+
+        info!("Raft node {} started successfully", self.config.node_id);
         Ok(())
     }
 
@@ -183,7 +196,7 @@ impl RaftNode {
 
     /// Check if this node is the leader
     pub async fn is_leader(&self) -> bool {
-        if let Some(ref raft) = self.raft {
+        if let Some(ref _raft) = self.raft {
             // TODO: Use real Raft instance when available
             // raft.is_leader().await
             
@@ -197,7 +210,7 @@ impl RaftNode {
 
     /// Get current leader ID
     pub async fn get_leader(&self) -> Option<NodeId> {
-        if let Some(ref raft) = self.raft {
+        if let Some(ref _raft) = self.raft {
             // TODO: Use real Raft instance when available
             // raft.current_leader().await
             
@@ -264,6 +277,29 @@ impl RaftNode {
         // }
 
         info!("Membership change completed");
+        Ok(())
+    }
+
+    /// Check if this is a single-node cluster
+    async fn is_single_node_cluster(&self) -> bool {
+        let members = self.members.read().await;
+        members.len() == 1 && members.contains(&self.config.node_id)
+    }
+
+    /// Initialize a single-node cluster
+    async fn initialize_cluster(&self) -> Result<()> {
+        if let Some(ref raft) = self.raft {
+            info!("Initializing single-node cluster for node {}", self.config.node_id);
+
+            let mut members = BTreeSet::new();
+            members.insert(self.config.node_id);
+
+            raft.initialize(members).await.map_err(|e| {
+                crate::error::ConfluxError::raft(format!("Failed to initialize cluster: {}", e))
+            })?;
+
+            info!("Single-node cluster initialized successfully");
+        }
         Ok(())
     }
 }

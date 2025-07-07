@@ -4,7 +4,7 @@ use super::constants::*;
 use super::types::Store;
 use rocksdb::IteratorMode;
 use std::collections::BTreeMap;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 impl Store {
     /// Load all data from disk into memory cache
@@ -336,7 +336,6 @@ pub struct StorageStats {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    use std::collections::BTreeMap;
 
     #[tokio::test]
     async fn test_load_from_disk() {

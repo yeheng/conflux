@@ -50,6 +50,7 @@ impl Store {
     /// Create a standardized error response
     pub(crate) fn create_error_response(message: String) -> ClientWriteResponse {
         ClientWriteResponse {
+            config_id: None,
             success: false,
             message,
             data: None,
@@ -59,6 +60,7 @@ impl Store {
     /// Create a standardized success response
     pub(crate) fn create_success_response(message: String, data: Option<serde_json::Value>) -> ClientWriteResponse {
         ClientWriteResponse {
+            config_id: None,
             success: true,
             message,
             data,

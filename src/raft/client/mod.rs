@@ -2,7 +2,7 @@ use crate::error::Result;
 use crate::raft::types::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 // 重新导出模块内容
 pub mod types;
@@ -16,17 +16,32 @@ pub use helpers::*;
 /// Client interface for interacting with the Raft cluster
 #[derive(Clone)]
 pub struct RaftClient {
-    /// Local store for direct access (for MVP)
+    /// Local store for direct access (fallback when Raft is not available)
     store: Arc<crate::raft::store::Store>,
+    /// Raft node for consensus operations
+    raft_node: Option<Arc<RwLock<crate::raft::node::RaftNode>>>,
     /// Current leader node (for routing requests)
     current_leader: Arc<RwLock<Option<NodeId>>>,
 }
 
 impl RaftClient {
-    /// Create a new Raft client
+    /// Create a new Raft client with store only (fallback mode)
     pub fn new(store: Arc<crate::raft::store::Store>) -> Self {
         Self {
             store,
+            raft_node: None,
+            current_leader: Arc::new(RwLock::new(Some(1))), // Default to node 1 as leader
+        }
+    }
+
+    /// Create a new Raft client with Raft node (consensus mode)
+    pub fn new_with_raft_node(
+        store: Arc<crate::raft::store::Store>,
+        raft_node: Arc<RwLock<crate::raft::node::RaftNode>>,
+    ) -> Self {
+        Self {
+            store,
+            raft_node: Some(raft_node),
             current_leader: Arc::new(RwLock::new(Some(1))), // Default to node 1 as leader
         }
     }
@@ -35,11 +50,32 @@ impl RaftClient {
     pub async fn write(&self, request: ClientWriteRequest) -> Result<ClientWriteResponse> {
         info!("Processing client write request: {:?}", request.command);
 
-        // For MVP, directly apply to local store
-        // In a real implementation, this would route to the leader
+        // Try to use Raft consensus if available
+        if let Some(ref raft_node) = self.raft_node {
+            debug!("Routing write request through Raft consensus");
+            let node = raft_node.read().await;
+
+            // Convert ClientWriteRequest to ClientRequest
+            let client_request = ClientRequest {
+                command: request.command.clone(),
+            };
+
+            match node.client_write(client_request).await {
+                Ok(response) => {
+                    debug!("Raft write completed successfully");
+                    return Ok(response);
+                }
+                Err(e) => {
+                    warn!("Raft write failed, falling back to direct store access: {}", e);
+                }
+            }
+        }
+
+        // Fallback to direct store access
+        warn!("Using direct store access (bypassing consensus)");
         let response = self.store.apply_command(&request.command).await?;
 
-        debug!("Client write completed successfully");
+        debug!("Direct store write completed");
         Ok(response)
     }
 

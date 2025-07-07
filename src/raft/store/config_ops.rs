@@ -108,6 +108,20 @@ impl Store {
                 )
                 .await
             }
+            RaftCommand::UpdateConfig {
+                config_id,
+                namespace,
+                name,
+                content,
+                format,
+                schema,
+                description,
+            } => {
+                self.handle_update_config(
+                    config_id, namespace, name, content, format, schema, description,
+                )
+                .await
+            }
             RaftCommand::CreateVersion {
                 config_id,
                 content,
@@ -117,6 +131,9 @@ impl Store {
             } => {
                 self.handle_create_version(config_id, content, format, creator_id, description)
                     .await
+            }
+            RaftCommand::ReleaseVersion { config_id, version_id } => {
+                self.handle_release_version(config_id, version_id).await
             }
             RaftCommand::UpdateReleaseRules {
                 config_id,
@@ -211,8 +228,194 @@ impl Store {
         });
 
         Ok(ClientWriteResponse {
+            config_id: Some(config_id),
             success: true,
             message: "Configuration created successfully".to_string(),
+            data: Some(serde_json::json!({
+                "config_id": config_id,
+                "version_id": version_id
+            })),
+        })
+    }
+
+    /// Handle update config command
+    async fn handle_update_config(
+        &self,
+        config_id: &u64,
+        namespace: &ConfigNamespace,
+        name: &str,
+        content: &[u8],
+        format: &ConfigFormat,
+        schema: &Option<String>,
+        description: &str,
+    ) -> Result<ClientWriteResponse> {
+        // Find the existing config by ID
+        let (config_key, mut existing_config) = match self.find_config_by_id(*config_id).await {
+            Ok((key, config)) => (key, config),
+            Err(_) => {
+                return Ok(Self::create_error_response(format!(
+                    "Configuration with ID {} not found",
+                    config_id
+                )));
+            }
+        };
+
+        // Generate new version ID for the updated content
+        let version_id = {
+            let versions = self.versions.read().await;
+            let empty_map = BTreeMap::new();
+            let config_versions = versions.get(config_id).unwrap_or(&empty_map);
+            config_versions.keys().max().copied().unwrap_or(0) + 1
+        };
+
+        let now = chrono::Utc::now();
+
+        // Update config metadata
+        let old_config_key = config_key.clone();
+        let new_config_key = make_config_key(namespace, name);
+
+        existing_config.namespace = namespace.clone();
+        existing_config.name = name.to_string();
+        existing_config.latest_version_id = version_id;
+        existing_config.schema = schema.clone();
+        existing_config.updated_at = now;
+
+        // Create new version with updated content
+        let version = ConfigVersion {
+            id: version_id,
+            config_id: *config_id,
+            content: content.to_vec(),
+            content_hash: format!("{:x}", sha2::Sha256::digest(content)),
+            format: format.clone(),
+            creator_id: 0, // UpdateConfig doesn't have creator_id, using 0 as system
+            created_at: now,
+            description: description.to_string(),
+        };
+
+        // Persist to RocksDB and update in-memory state
+        self.persist_config(&new_config_key, &existing_config).await?;
+        self.persist_version(&version).await?;
+
+        // Update in-memory structures
+        {
+            let mut configs = self.configurations.write().await;
+            // Remove old key if it's different from new key
+            if old_config_key != new_config_key {
+                configs.remove(&old_config_key);
+            }
+            configs.insert(new_config_key.clone(), existing_config.clone());
+        }
+
+        {
+            let mut versions = self.versions.write().await;
+            versions
+                .entry(*config_id)
+                .or_insert_with(BTreeMap::new)
+                .insert(version_id, version);
+        }
+
+        {
+            let mut name_index = self.name_index.write().await;
+            // Remove old key if it's different from new key
+            if old_config_key != new_config_key {
+                name_index.remove(&old_config_key);
+            }
+            name_index.insert(new_config_key, *config_id);
+        }
+
+        // Send notification
+        let _ = self.change_notifier.send(ConfigChangeEvent {
+            config_id: *config_id,
+            namespace: namespace.clone(),
+            name: name.to_string(),
+            version_id,
+            change_type: ConfigChangeType::Updated,
+        });
+
+        Ok(ClientWriteResponse {
+            config_id: Some(*config_id),
+            success: true,
+            message: "Configuration updated successfully".to_string(),
+            data: Some(serde_json::json!({
+                "config_id": config_id,
+                "version_id": version_id
+            })),
+        })
+    }
+
+    /// Handle release version command
+    async fn handle_release_version(
+        &self,
+        config_id: &u64,
+        version_id: &u64,
+    ) -> Result<ClientWriteResponse> {
+        // Find the config by ID
+        let (config_key, config) = match self.find_config_by_id(*config_id).await {
+            Ok((key, config)) => (key, config),
+            Err(_) => {
+                return Ok(Self::create_error_response(format!(
+                    "Configuration with ID {} not found",
+                    config_id
+                )));
+            }
+        };
+
+        // Validate that the version exists
+        if let Err(_) = self.validate_version_exists(*config_id, *version_id).await {
+            return Ok(Self::create_error_response(format!(
+                "Version {} does not exist for config {}",
+                version_id, config_id
+            )));
+        }
+
+        // Update the config's release rules to include this version as the default
+        {
+            let mut configs = self.configurations.write().await;
+            if let Some(config) = configs.get_mut(&config_key) {
+                // Add or update the default release to point to this version
+                let mut found_default = false;
+                for release in &mut config.releases {
+                    if release.labels.is_empty() {
+                        // This is the default release
+                        release.version_id = *version_id;
+                        found_default = true;
+                        break;
+                    }
+                }
+
+                // If no default release exists, create one
+                if !found_default {
+                    config.releases.push(Release {
+                        labels: BTreeMap::new(),
+                        version_id: *version_id,
+                        priority: 0,
+                    });
+                }
+
+                config.updated_at = chrono::Utc::now();
+
+                // Persist the updated config to RocksDB
+                if let Err(e) = self.persist_config(&config_key, config).await {
+                    return Ok(Self::create_error_response(format!(
+                        "Failed to persist config update: {}", e
+                    )));
+                }
+            }
+        }
+
+        // Send notification
+        let _ = self.change_notifier.send(ConfigChangeEvent {
+            config_id: *config_id,
+            namespace: config.namespace.clone(),
+            name: config.name.clone(),
+            version_id: *version_id,
+            change_type: ConfigChangeType::Updated,
+        });
+
+        Ok(ClientWriteResponse {
+            config_id: Some(*config_id),
+            success: true,
+            message: format!("Version {} released successfully", version_id),
             data: Some(serde_json::json!({
                 "config_id": config_id,
                 "version_id": version_id

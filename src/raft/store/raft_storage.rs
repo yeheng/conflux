@@ -130,6 +130,7 @@ impl RaftStorage<TypeConfig> for Arc<Store> {
 
             match &entry.payload {
                 EntryPayload::Blank => res.push(ClientWriteResponse {
+                    config_id: None,
                     success: true,
                     message: "Blank entry applied".to_string(),
                     data: None,
@@ -138,6 +139,7 @@ impl RaftStorage<TypeConfig> for Arc<Store> {
                     // Apply the command to the configuration store
                     let response = self.apply_command(&data.command).await.unwrap_or_else(|e| {
                         ClientWriteResponse {
+                            config_id: None,
                             success: false,
                             message: format!("Error applying command: {}", e),
                             data: None,
@@ -148,6 +150,7 @@ impl RaftStorage<TypeConfig> for Arc<Store> {
                 EntryPayload::Membership(ref mem) => {
                     sm.last_membership = StoredMembership::new(Some(entry.log_id), mem.clone());
                     res.push(ClientWriteResponse {
+                        config_id: None,
                         success: true,
                         message: "Membership updated".to_string(),
                         data: None,
