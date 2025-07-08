@@ -3,9 +3,9 @@ mod tests {
     use super::super::types::Store;
     use crate::raft::types::*;
     use openraft::{
-        storage::{LogState, Snapshot, SnapshotMeta},
-        Entry, EntryPayload, LogId, RaftStorage, StorageError, StoredMembership, Vote,
-        CommittedLeaderId, LeaderId,
+        storage::SnapshotMeta,
+        Entry, EntryPayload, LogId, RaftStorage, StoredMembership, Vote,
+        CommittedLeaderId,
     };
     use std::io::Cursor;
     use std::sync::Arc;

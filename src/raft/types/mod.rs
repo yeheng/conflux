@@ -42,3 +42,6 @@ pub struct RaftMetrics {
     pub membership: std::collections::BTreeSet<NodeId>,
     pub is_leader: bool,
 }
+
+#[cfg(test)]
+mod command_tests;

@@ -431,3 +431,7 @@ impl Store {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "config_ops_tests.rs"]
+mod tests;

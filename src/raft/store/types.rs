@@ -72,7 +72,7 @@ pub struct ConfigChangeEvent {
 }
 
 /// Type of configuration change
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigChangeType {
     Created,
     Updated,
