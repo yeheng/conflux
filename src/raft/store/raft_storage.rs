@@ -136,8 +136,8 @@ impl RaftStorage<TypeConfig> for Arc<Store> {
                     data: None,
                 }),
                 EntryPayload::Normal(ref data) => {
-                    // Apply the command to the configuration store
-                    let response = self.apply_command(&data.command).await.unwrap_or_else(|e| {
+                    // Apply the command to the configuration store using state change method
+                    let response = self.apply_state_change(&data.command).await.unwrap_or_else(|e| {
                         ClientWriteResponse {
                             config_id: None,
                             success: false,

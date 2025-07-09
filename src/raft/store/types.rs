@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, RwLock};
 
 /// Store with RocksDB backend implementing RaftStorage
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Store {
     /// RocksDB instance for persistent storage
     pub(crate) db: Arc<DB>,

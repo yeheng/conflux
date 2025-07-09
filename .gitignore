@@ -1,3 +1,11 @@
 /target
 /test_data
 /data
+.cursor
+.idea
+.vscode
+.git
+.DS_Store
+.gitignore
+.roo
+tarpaulin*

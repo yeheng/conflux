@@ -149,6 +149,67 @@ impl Store {
         }
     }
 
+    /// Apply state change directly (used by state machine to avoid circular dependency)
+    /// This method is similar to apply_command but is designed for use by the state machine
+    pub async fn apply_state_change(&self, command: &RaftCommand) -> Result<ClientWriteResponse> {
+        // This is essentially the same as apply_command, but semantically different
+        // It's called by the state machine to apply changes after consensus
+        match command {
+            RaftCommand::CreateConfig {
+                namespace,
+                name,
+                content,
+                format,
+                schema,
+                creator_id,
+                description,
+            } => {
+                self.handle_create_config(
+                    namespace, name, content, format, schema, creator_id, description,
+                )
+                .await
+            }
+            RaftCommand::UpdateConfig {
+                config_id,
+                namespace,
+                name,
+                content,
+                format,
+                schema,
+                description,
+            } => {
+                self.handle_update_config(
+                    config_id, namespace, name, content, format, schema, description,
+                )
+                .await
+            }
+            RaftCommand::CreateVersion {
+                config_id,
+                content,
+                format,
+                creator_id,
+                description,
+            } => {
+                self.handle_create_version(config_id, content, format, creator_id, description)
+                    .await
+            }
+            RaftCommand::ReleaseVersion { config_id, version_id } => {
+                self.handle_release_version(config_id, version_id).await
+            }
+            RaftCommand::UpdateReleaseRules {
+                config_id,
+                releases,
+            } => self.handle_update_release_rules(config_id, releases).await,
+            RaftCommand::DeleteConfig { config_id } => {
+                self.handle_delete_config(config_id).await
+            }
+            RaftCommand::DeleteVersions {
+                config_id,
+                version_ids,
+            } => self.handle_delete_versions(config_id, version_ids).await,
+        }
+    }
+
     /// Handle create config command
     async fn handle_create_config(
         &self,

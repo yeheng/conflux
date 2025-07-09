@@ -5,12 +5,12 @@ use crate::raft::{
     store::Store,
     types::*,
 };
-use openraft::Config as RaftConfig;
+use openraft::{Config as RaftConfig, Raft};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 
 /// Raft node configuration
 #[derive(Debug, Clone)]
@@ -98,21 +98,38 @@ impl RaftNode {
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting Raft node {}", self.config.node_id);
 
-        // Create network factory
-        let _network_factory = self.network_factory.read().await.clone();
+        // openraft 0.9 正确初始化方式：直接用 Arc<Store> 作为 storage
+        let network_factory = {
+            let factory = self.network_factory.read().await;
+            factory.clone()
+        };
 
-        // TODO: Complete Raft instance initialization
-        // The openraft 0.9 API requires specific trait implementations
-        // Current Store implements RaftStorage but needs RaftLogStorage and RaftStateMachine
-        // This will be completed in the next iteration
+        let mut raft_config = self.config.raft_config.clone();
+        raft_config.heartbeat_interval = 150;
+        raft_config.election_timeout_min = 300;
+        raft_config.election_timeout_max = 600;
 
-        // For now, we'll skip the Raft initialization to allow other components to work
-        // let log_store = Adaptor::new(self.store.clone());
-        // let state_machine = Adaptor::new(self.store.clone());
-        // let raft = openraft::Raft::new(...).await?;
-        // self.raft = Some(raft);
+        // openraft 0.9的Adaptor::new()返回(log_storage, state_machine)元组
+        // 使用Adaptor包装Store来提供这两个组件
+        let (log_storage, state_machine) = openraft::storage::Adaptor::new(self.store.clone());
 
-        // self.raft = Some(raft); // Will be uncommented when Raft initialization is complete
+        // openraft 0.9 Raft::new 需要5个参数：node_id, config, network_factory, log_storage, state_machine
+        match Raft::new(
+            self.config.node_id,
+            Arc::new(raft_config),
+            network_factory,
+            log_storage,
+            state_machine,
+        ).await {
+            Ok(raft) => {
+                self.raft = Some(raft);
+                info!("Raft instance initialized successfully for node {}", self.config.node_id);
+            }
+            Err(e) => {
+                error!("Failed to initialize Raft instance: {}", e);
+                return Err(crate::error::ConfluxError::raft(format!("Raft initialization failed: {}", e)));
+            }
+        }
 
         // Initialize single-node cluster if needed
         if self.is_single_node_cluster().await {
@@ -130,13 +147,28 @@ impl RaftNode {
 
     /// Submit a client write request through Raft
     pub async fn client_write(&self, request: ClientRequest) -> Result<ClientWriteResponse> {
-        // For MVP, directly apply to store
-        // TODO: Route through Raft consensus when properly initialized
         info!(
-            "Processing client write through Raft node {}",
+            "Processing client write through Raft consensus on node {}",
             self.config.node_id
         );
-        self.store.apply_command(&request.command).await
+
+        if let Some(ref raft) = self.raft {
+            // Route through Raft consensus
+            match raft.client_write(request).await {
+                Ok(raft_response) => {
+                    // The raft_response.data contains our ClientWriteResponse
+                    Ok(raft_response.data)
+                },
+                Err(e) => {
+                    error!("Raft client write failed: {}", e);
+                    Err(crate::error::ConfluxError::raft(format!("Raft write failed: {}", e)))
+                }
+            }
+        } else {
+            // Fallback to direct store access if Raft is not initialized
+            warn!("Raft not initialized, falling back to direct store access");
+            self.store.apply_command(&request.command).await
+        }
     }
 
     /// Stop the node (placeholder implementation)

@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, RwLock};
-
 impl Store {
     /// Create a new Store instance with RocksDB backend
     pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -50,4 +49,5 @@ impl Store {
 
         Ok(store)
     }
+
 }
