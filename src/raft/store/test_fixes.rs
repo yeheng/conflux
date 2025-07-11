@@ -3,12 +3,20 @@ mod fix_validation_tests {
     use crate::raft::store::Store;
     use crate::raft::types::*;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
     use tempfile::tempdir;
+
+    async fn create_test_store() -> (Arc<Store>, tempfile::TempDir) {
+        let temp_dir = tempdir().unwrap();
+        let (store, _) = Store::new(temp_dir.path()).await.unwrap();
+        (Arc::new(store), temp_dir)
+    }
 
     #[tokio::test]
     async fn test_release_rules_persistence_fix() {
         let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _) = Store::new(temp_dir.path()).await.unwrap();
+        let store = Arc::new(store);
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -66,7 +74,7 @@ mod fix_validation_tests {
 
         // Test that creating a new store instance loads the persisted data correctly
         drop(store);
-        let new_store = Store::new(temp_dir.path()).await.unwrap();
+        let (new_store, _) = Store::new(temp_dir.path()).await.unwrap();
         let loaded_config = new_store.get_config(&namespace, "test-config.toml").await.unwrap();
         assert_eq!(loaded_config.releases.len(), 2);
         assert_eq!(loaded_config.releases, releases);
@@ -74,8 +82,7 @@ mod fix_validation_tests {
 
     #[tokio::test]
     async fn test_improved_error_handling() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         // Test error handling for non-existent config
         let update_command = RaftCommand::UpdateReleaseRules {

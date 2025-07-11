@@ -4,9 +4,9 @@ use rocksdb::DB;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, mpsc, oneshot, RwLock};
 
-/// Store with RocksDB backend implementing RaftStorage
+/// Store with RocksDB backend implementing RaftLogStorage
 #[derive(Clone, Debug)]
 pub struct Store {
     /// RocksDB instance for persistent storage
@@ -36,14 +36,81 @@ pub struct Store {
     /// Vote storage
     pub(crate) vote: Arc<RwLock<Option<Vote<NodeId>>>>,
 
-    /// State machine data
-    pub(crate) state_machine: Arc<RwLock<ConfluxStateMachine>>,
+    /// 移除循环依赖：不再直接包含状态机
+    /// 改为使用事件通信机制
+    /// state_machine: Arc<RwLock<ConfluxStateMachine>>, // 已移除
 
     /// Current snapshot
     pub(crate) current_snapshot: Arc<RwLock<Option<ConfluxSnapshot>>>,
 
     /// Snapshot index counter
     pub(crate) snapshot_idx: Arc<Mutex<u64>>,
+
+    /// 事件发送器，用于与状态机通信
+    pub(crate) event_sender: Option<mpsc::Sender<StateChangeEvent>>,
+}
+
+/// 状态机管理器，负责处理状态变更事件循环
+#[derive(Debug)]
+pub struct StateMachineManager {
+    /// Store实例用于处理状态变更
+    store: Arc<Store>,
+    /// 事件接收器
+    event_receiver: mpsc::Receiver<StateChangeEvent>,
+    /// 状态机实例
+    state: crate::raft::state_machine::ConfluxStateMachine,
+}
+
+impl StateMachineManager {
+    /// 创建新的状态机管理器
+    pub fn new(store: Arc<Store>, event_receiver: mpsc::Receiver<StateChangeEvent>) -> Self {
+        Self {
+            state: crate::raft::state_machine::ConfluxStateMachine::new(store.clone()),
+            store,
+            event_receiver,
+        }
+    }
+
+    /// 运行事件处理循环
+    pub async fn run(&mut self) {
+        while let Some(event) = self.event_receiver.recv().await {
+            match event {
+                StateChangeEvent::CommandApplied {
+                    command,
+                    response_sender,
+                } => {
+                    let result = self
+                        .store
+                        .apply_state_change(&command)
+                        .await
+                        .map_err(|e| format!("State change failed: {}", e));
+                    let _ = response_sender.send(result);
+                }
+                StateChangeEvent::SnapshotRequest { response_sender } => {
+                    let result = self
+                        .state
+                        .get_state()
+                        .await
+                        .map_err(|e| format!("Snapshot failed: {}", e));
+                    let _ = response_sender.send(result);
+                }
+            }
+        }
+    }
+}
+
+/// 状态变更事件类型
+#[derive(Debug)]
+pub enum StateChangeEvent {
+    /// 应用命令事件
+    CommandApplied {
+        command: RaftCommand,
+        response_sender: oneshot::Sender<Result<ClientWriteResponse, String>>,
+    },
+    /// 快照请求事件
+    SnapshotRequest {
+        response_sender: oneshot::Sender<Result<Vec<u8>, String>>,
+    },
 }
 
 /// State machine for Conflux

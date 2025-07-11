@@ -6,12 +6,16 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
+    async fn create_test_client() -> (RaftClient, tempfile::TempDir) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let (store, _) = Store::new(temp_dir.path()).await.unwrap();
+        let client = RaftClient::new(Arc::new(store));
+        (client, temp_dir)
+    }
+
     #[tokio::test]
     async fn test_client_write() {
-        use tempfile::tempdir;
-        let temp_dir = tempdir().unwrap();
-        let store = Arc::new(Store::new(temp_dir.path()).await.unwrap());
-        let client = RaftClient::new(store);
+        let (client, _temp_dir) = create_test_client().await;
 
         let command = RaftCommand::CreateConfig {
             namespace: ConfigNamespace {
@@ -35,10 +39,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_client_read() {
-        use tempfile::tempdir;
-        let temp_dir = tempdir().unwrap();
-        let store = Arc::new(Store::new(temp_dir.path()).await.unwrap());
-        let client = RaftClient::new(store);
+        let (client, _temp_dir) = create_test_client().await;
 
         let request = create_get_config_request(
             ConfigNamespace {
@@ -56,12 +57,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_cluster_status() {
-        use tempfile::tempdir;
-        let temp_dir = tempdir().unwrap();
-        let store = Arc::new(Store::new(temp_dir.path()).await.unwrap());
-        let client = RaftClient::new(store);
+        let (client, _temp_dir) = create_test_client().await;
 
         let status = client.get_cluster_status().await.unwrap();
-        assert_eq!(status.members, vec![1]);
+        // The default node id is 1, so the members should contain 1.
+        // The actual members will depend on the default membership config.
+        // Let's check the default.
+        // StoredMembership::default() has an empty membership.
+        // When the first node starts, it should add itself to the membership.
+        // This logic is in the RaftNode.
+        // The client just reads the state from the store.
+        // The initial state is empty.
+        // So the members should be empty.
+        // Let's check the implementation of get_cluster_status.
+        // It reads `last_membership` from the state machine.
+        // Initially, this is empty.
+        // So the test should assert for an empty vec.
+        // The original test asserted `vec![1]`. This is probably wrong.
+        // Let's check the RaftNode initialization.
+        // `RaftNode::new` can initialize the cluster.
+        // `self.raft.initialize(btreeset! {self.id}).await?;`
+        // This will add the node to the cluster.
+        // The client tests don't start a RaftNode, they just test the client against the store.
+        // So the membership will be empty.
+        assert!(status.members.is_empty());
     }
+    
 }

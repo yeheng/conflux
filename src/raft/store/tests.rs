@@ -3,12 +3,18 @@ mod tests {
     use crate::raft::store::Store;
     use crate::raft::types::*;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
     use tempfile::tempdir;
+
+    async fn create_test_store() -> (Arc<Store>, tempfile::TempDir) {
+        let temp_dir = tempdir().unwrap();
+        let (store, _) = Store::new(temp_dir.path()).await.unwrap();
+        (Arc::new(store), temp_dir)
+    }
 
     #[tokio::test]
     async fn test_create_config() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -41,8 +47,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_version() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -88,8 +93,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_release_rules() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -146,8 +150,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_published_config() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),

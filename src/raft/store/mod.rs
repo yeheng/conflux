@@ -7,11 +7,13 @@ mod config_ops;
 mod commands;
 mod delete_handlers;
 mod raft_impl;
-mod raft_storage;
+// 注释掉旧的 raft_storage，使用新的 v2 版本
+// mod raft_storage;
+mod raft_storage_v2;
 mod transaction;
 
 // Re-export public types and functions
-pub use types::Store;
+pub use types::{Store, StateMachineManager};
 // Commented out unused exports until needed
 // pub use types::{ConfluxStateMachine, ConfluxSnapshot, ConfigChangeEvent, ConfigChangeType};
 

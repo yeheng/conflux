@@ -1,13 +1,23 @@
 #[cfg(test)]
 mod tests {
-    use crate::raft::{store::types::ConfigChangeType, types::*, Store};
+    use crate::raft::{
+        store::types::ConfigChangeType,
+        types::{ConfigFormat, ConfigNamespace, RaftCommand, Release},
+        Store,
+    };
     use std::collections::BTreeMap;
+    use std::sync::Arc;
     use tempfile::tempdir;
+
+    async fn create_test_store() -> (Arc<Store>, tempfile::TempDir) {
+        let temp_dir = tempdir().unwrap();
+        let (store, _) = Store::new(temp_dir.path()).await.unwrap();
+        (Arc::new(store), temp_dir)
+    }
 
     #[tokio::test]
     async fn test_config_exists_false() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "nonexistent".to_string(),
@@ -20,8 +30,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_none() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -34,16 +43,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_config_version_none() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         assert!(store.get_config_version(999, 1).await.is_none());
     }
 
     #[tokio::test]
     async fn test_get_published_config_none() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -52,21 +59,22 @@ mod tests {
         };
 
         let labels = BTreeMap::new();
-        assert!(store.get_published_config(&namespace, "missing.json", &labels).await.is_none());
+        assert!(store
+            .get_published_config(&namespace, "missing.json", &labels)
+            .await
+            .is_none());
     }
 
     #[tokio::test]
     async fn test_get_config_meta_none() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         assert!(store.get_config_meta(999).await.is_none());
     }
 
     #[tokio::test]
     async fn test_list_config_versions_empty() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let versions = store.list_config_versions(999).await;
         assert!(versions.is_empty());
@@ -74,16 +82,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_latest_version_none() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         assert!(store.get_latest_version(999).await.is_none());
     }
 
     #[tokio::test]
     async fn test_list_configs_in_namespace_empty() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "empty".to_string(),
@@ -97,8 +103,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_duplicate_config() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -138,8 +143,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_version_nonexistent_config() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let command = RaftCommand::CreateVersion {
             config_id: 999,
@@ -156,8 +160,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_release_rules_nonexistent_config() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let mut labels = BTreeMap::new();
         labels.insert("env".to_string(), "prod".to_string());
@@ -175,8 +178,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_release_rules_nonexistent_version() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         // Create config first
         let namespace = ConfigNamespace {
@@ -216,8 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_release_version_nonexistent_config() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let command = RaftCommand::ReleaseVersion {
             config_id: 999,
@@ -231,8 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_release_version_nonexistent_version() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         // Create config first
         let namespace = ConfigNamespace {
@@ -268,8 +268,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_config_command() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         // Create initial config
         let namespace = ConfigNamespace {
@@ -321,8 +320,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_config_nonexistent() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let namespace = ConfigNamespace {
             tenant: "test".to_string(),
@@ -347,8 +345,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_subscribe_changes() {
-        let temp_dir = tempdir().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let mut receiver = store.subscribe_changes();
 
@@ -376,10 +373,8 @@ mod tests {
         });
 
         // Wait for the change notification
-        let change_event = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            receiver.recv()
-        ).await;
+        let change_event =
+            tokio::time::timeout(std::time::Duration::from_millis(100), receiver.recv()).await;
 
         assert!(change_event.is_ok());
         let event = change_event.unwrap().unwrap();

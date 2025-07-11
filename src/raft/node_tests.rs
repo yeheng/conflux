@@ -19,6 +19,10 @@ mod tests {
             address: "127.0.0.1:8001".to_string(),
             raft_config: RaftConfig::default(),
             network_config: NetworkConfig::new(addresses),
+            heartbeat_interval: 150,
+            election_timeout_min: 300,
+            election_timeout_max: 600,
+            resource_limits: ResourceLimits::default(),
         }
     }
 

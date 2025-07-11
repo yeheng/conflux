@@ -9,3 +9,5 @@
 .gitignore
 .roo
 tarpaulin*
+.augment
+.mcp.json

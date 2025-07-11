@@ -2,13 +2,13 @@ use crate::error::Result;
 use crate::raft::types::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info};
 
 // 重新导出模块内容
-pub mod types;
 pub mod helpers;
 #[cfg(test)]
 mod tests;
+pub mod types;
 
 pub use types::*;
 // pub use helpers::*; // Commented out until needed
@@ -50,7 +50,7 @@ impl RaftClient {
     pub async fn write(&self, request: ClientWriteRequest) -> Result<ClientWriteResponse> {
         info!("Processing client write request: {:?}", request.command);
 
-        // Try to use Raft consensus if available
+        // Always use Raft consensus - no fallback to direct store access
         if let Some(ref raft_node) = self.raft_node {
             debug!("Routing write request through Raft consensus");
             let node = raft_node.read().await;
@@ -66,24 +66,26 @@ impl RaftClient {
                     return Ok(response);
                 }
                 Err(e) => {
-                    warn!("Raft write failed, falling back to direct store access: {}", e);
+                    error!("Raft write failed: {}", e);
+                    return Err(e);
                 }
             }
         }
 
-        // Fallback to direct store access
-        warn!("Using direct store access (bypassing consensus)");
-        let response = self.store.apply_command(&request.command).await?;
-
-        debug!("Direct store write completed");
-        Ok(response)
+        // Return error if no Raft node available instead of fallback
+        Err(crate::error::ConfluxError::raft(
+            "No Raft node available - cannot process write requests",
+        ))
     }
 
     /// Submit a write request with automatic leader detection
-    pub async fn write_with_leader_detection(&self, request: ClientWriteRequest) -> Result<ClientWriteResponse> {
+    pub async fn write_with_leader_detection(
+        &self,
+        request: ClientWriteRequest,
+    ) -> Result<ClientWriteResponse> {
         // Check if we know the current leader
         let leader_id = self.current_leader.read().await;
-        
+
         if leader_id.is_none() {
             return Err(crate::error::ConfluxError::raft("No leader available"));
         }
@@ -94,11 +96,14 @@ impl RaftClient {
     }
 
     /// Batch write multiple requests
-    pub async fn batch_write(&self, requests: Vec<ClientWriteRequest>) -> Result<Vec<ClientWriteResponse>> {
+    pub async fn batch_write(
+        &self,
+        requests: Vec<ClientWriteRequest>,
+    ) -> Result<Vec<ClientWriteResponse>> {
         info!("Processing batch write with {} requests", requests.len());
-        
+
         let mut responses = Vec::with_capacity(requests.len());
-        
+
         for request in requests {
             match self.write(request).await {
                 Ok(response) => responses.push(response),
@@ -109,15 +114,46 @@ impl RaftClient {
                 }
             }
         }
-        
+
         debug!("Batch write completed successfully");
         Ok(responses)
     }
 
-    /// Submit a read request to the cluster
+    /// Submit a read request to the cluster with linearizability through Raft
     pub async fn read(&self, request: ClientReadRequest) -> Result<ClientReadResponse> {
         debug!("Processing client read request: {:?}", request.operation);
 
+        // Ensure linearizable reads through Raft consensus
+        if let Some(ref raft_node) = self.raft_node {
+            let node = raft_node.read().await;
+
+            // Ensure we can provide linearizable reads (only leaders can guarantee this)
+            if let Some(ref raft) = node.get_raft() {
+                // Use ensure_linearizable to make sure we can provide consistent reads
+                match raft.ensure_linearizable().await {
+                    Ok(_) => {
+                        // We're the leader or can provide linearizable reads
+                        debug!("Linearizable read confirmed, proceeding with read operation");
+                    }
+                    Err(e) => {
+                        return Err(crate::error::ConfluxError::raft(format!(
+                            "Cannot provide linearizable read: {}",
+                            e
+                        )));
+                    }
+                }
+            } else {
+                return Err(crate::error::ConfluxError::raft(
+                    "Raft instance not available",
+                ));
+            }
+        } else {
+            return Err(crate::error::ConfluxError::raft(
+                "No Raft node available for reads",
+            ));
+        }
+
+        // Now perform the actual read operation
         let data = match request.operation {
             ReadOperation::GetConfig {
                 namespace,

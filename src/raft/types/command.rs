@@ -92,6 +92,95 @@ impl RaftCommand {
             RaftCommand::UpdateReleaseRules { .. } | RaftCommand::ReleaseVersion { .. }
         )
     }
+
+    /// Estimate the memory usage of this command in bytes
+    pub fn estimate_size(&self) -> usize {
+        match self {
+            RaftCommand::CreateConfig {
+                namespace,
+                name,
+                content,
+                format: _,
+                schema,
+                creator_id: _,
+                description,
+            } => {
+                // Base size for the enum variant
+                let base_size = std::mem::size_of::<RaftCommand>();
+                // Namespace: 3 strings (tenant, app, env) + overhead
+                let namespace_size = namespace.tenant.len() + namespace.app.len() + namespace.env.len() + 48;
+                // Name string + heap allocation overhead
+                let name_size = name.len() + 24;
+                // Content Vec<u8> + heap allocation overhead
+                let content_size = content.len() + 24;
+                // Schema Option<String> + heap allocation overhead
+                let schema_size = schema.as_ref().map(|s| s.len() + 24).unwrap_or(8);
+                // Description string + heap allocation overhead
+                let description_size = description.len() + 24;
+                
+                base_size + namespace_size + name_size + content_size + schema_size + description_size
+            }
+            RaftCommand::UpdateConfig {
+                config_id: _,
+                namespace,
+                name,
+                content,
+                format: _,
+                schema,
+                description,
+            } => {
+                let base_size = std::mem::size_of::<RaftCommand>();
+                let namespace_size = namespace.tenant.len() + namespace.app.len() + namespace.env.len() + 48;
+                let name_size = name.len() + 24;
+                let content_size = content.len() + 24;
+                let schema_size = schema.as_ref().map(|s| s.len() + 24).unwrap_or(8);
+                let description_size = description.len() + 24;
+                
+                base_size + namespace_size + name_size + content_size + schema_size + description_size
+            }
+            RaftCommand::CreateVersion {
+                config_id: _,
+                content,
+                format: _,
+                creator_id: _,
+                description,
+            } => {
+                let base_size = std::mem::size_of::<RaftCommand>();
+                let content_size = content.len() + 24;
+                let description_size = description.len() + 24;
+                
+                base_size + content_size + description_size
+            }
+            RaftCommand::ReleaseVersion { config_id: _, version_id: _ } => {
+                // Only contains two u64 values
+                std::mem::size_of::<RaftCommand>()
+            }
+            RaftCommand::DeleteConfig { config_id: _ } => {
+                // Only contains one u64 value
+                std::mem::size_of::<RaftCommand>()
+            }
+            RaftCommand::DeleteVersions { config_id: _, version_ids } => {
+                let base_size = std::mem::size_of::<RaftCommand>();
+                // Vec<u64> + heap allocation overhead
+                let version_ids_size = version_ids.len() * 8 + 24;
+                
+                base_size + version_ids_size
+            }
+            RaftCommand::UpdateReleaseRules { config_id: _, releases } => {
+                let base_size = std::mem::size_of::<RaftCommand>();
+                // Estimate size of Vec<Release>
+                let releases_size = releases.iter().fold(24, |acc, release| {
+                    // Each Release has: BTreeMap<String, String> + u64 + i32
+                    let labels_size = release.labels.iter().fold(48, |acc, (k, v)| {
+                        acc + k.len() + v.len() + 48 // key + value + BTreeMap overhead per entry
+                    });
+                    acc + labels_size + 16 // version_id (u64) + priority (i32) + padding
+                });
+                
+                base_size + releases_size
+            }
+        }
+    }
 }
 
 /// Client request wrapper for Raft

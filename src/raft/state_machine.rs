@@ -1,20 +1,20 @@
 //! 独立的Raft状态机实现
-//! 
+//!
 //! 这个模块实现了openraft 0.9需要的RaftStateMachine trait，
 //! 与日志存储完全分离，专注于状态变更。
 
-use crate::raft::types::*;
 use crate::raft::store::Store;
+use crate::raft::types::*;
 use openraft::{
-    storage::{RaftStateMachine, Snapshot, SnapshotMeta},
-    Entry, EntryPayload, LogId, OptionalSend, RaftSnapshotBuilder, StorageError, StoredMembership,
+    storage::{Snapshot, SnapshotMeta},
+    Entry, EntryPayload, LogId, StorageError, StoredMembership,
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
 /// 独立的Raft状态机实现
-/// 
+///
 /// 负责将Raft日志条目应用到应用状态，使用apply_state_change避免循环依赖
 #[derive(Debug)]
 pub struct ConfluxStateMachine {
@@ -47,9 +47,12 @@ impl ConfluxStateMachine {
     }
 
     /// 应用业务命令到状态
-    /// 
+    ///
     /// 使用apply_state_change而不是apply_command避免循环依赖
-    async fn apply_business_command(&mut self, command: &RaftCommand) -> Result<ClientWriteResponse, StorageError<NodeId>> {
+    async fn apply_business_command(
+        &mut self,
+        command: &RaftCommand,
+    ) -> Result<ClientWriteResponse, StorageError<NodeId>> {
         debug!("Applying business command: {:?}", command);
 
         match self.store.apply_state_change(command).await {
@@ -76,16 +79,22 @@ impl ConfluxStateMachine {
         log_id: LogId<NodeId>,
         membership: openraft::Membership<NodeId, Node>,
     ) -> Result<(), StorageError<NodeId>> {
-        debug!("Applying membership change at log {}: {:?}", log_id, membership);
+        debug!(
+            "Applying membership change at log {}: {:?}",
+            log_id, membership
+        );
 
         self.last_membership = StoredMembership::new(Some(log_id), membership);
-        
+
         info!("Membership updated successfully");
         Ok(())
     }
 
     /// 应用单个日志条目
-    async fn apply_entry(&mut self, entry: &Entry<TypeConfig>) -> Result<ClientWriteResponse, StorageError<NodeId>> {
+    async fn apply_entry(
+        &mut self,
+        entry: &Entry<TypeConfig>,
+    ) -> Result<ClientWriteResponse, StorageError<NodeId>> {
         // 更新最后应用的日志ID
         self.last_applied_log = Some(entry.log_id);
 
@@ -104,8 +113,12 @@ impl ConfluxStateMachine {
                 self.apply_business_command(&data.command).await
             }
             EntryPayload::Membership(ref membership) => {
-                debug!("Applying membership entry at log {}: {:?}", entry.log_id, membership);
-                self.apply_membership_change(entry.log_id, membership.clone()).await?;
+                debug!(
+                    "Applying membership entry at log {}: {:?}",
+                    entry.log_id, membership
+                );
+                self.apply_membership_change(entry.log_id, membership.clone())
+                    .await?;
                 Ok(ClientWriteResponse {
                     config_id: None,
                     success: true,
@@ -117,7 +130,10 @@ impl ConfluxStateMachine {
     }
 
     /// 批量应用日志条目
-    pub async fn apply_entries(&mut self, entries: &[Entry<TypeConfig>]) -> Result<Vec<ClientWriteResponse>, StorageError<NodeId>> {
+    pub async fn apply_entries(
+        &mut self,
+        entries: &[Entry<TypeConfig>],
+    ) -> Result<Vec<ClientWriteResponse>, StorageError<NodeId>> {
         let mut responses = Vec::with_capacity(entries.len());
 
         for entry in entries {
@@ -148,22 +164,21 @@ impl ConfluxStateMachine {
             last_membership: self.last_membership.clone(),
         };
 
-        serde_json::to_vec(&state)
-            .map_err(|e| StorageError::IO {
-                source: openraft::StorageIOError::new(
-                    openraft::ErrorSubject::Snapshot(None),
-                    openraft::ErrorVerb::Write,
-                    openraft::AnyError::error(format!("Failed to serialize state: {}", e)),
-                ),
-            })
+        serde_json::to_vec(&state).map_err(|e| StorageError::IO {
+            source: openraft::StorageIOError::new(
+                openraft::ErrorSubject::Snapshot(None),
+                openraft::ErrorVerb::Write,
+                openraft::AnyError::error(format!("Failed to serialize state: {}", e)),
+            ),
+        })
     }
 
     /// 从快照恢复状态机状态
     pub async fn restore_from_snapshot(&mut self, data: &[u8]) -> Result<(), StorageError<NodeId>> {
         debug!("Restoring state machine from snapshot");
 
-        let state: StateMachineSnapshot = serde_json::from_slice(data)
-            .map_err(|e| StorageError::IO {
+        let state: StateMachineSnapshot =
+            serde_json::from_slice(data).map_err(|e| StorageError::IO {
                 source: openraft::StorageIOError::new(
                     openraft::ErrorSubject::Snapshot(None),
                     openraft::ErrorVerb::Read,
@@ -205,6 +220,11 @@ impl ConfluxStateMachineWrapper {
         let sm = self.inner.read().await;
         (sm.last_applied_log, sm.last_membership.clone())
     }
+
+    /// 获取内部状态机的访问权限（用于 RaftStateMachine 实现）
+    pub(crate) fn inner(&self) -> &Arc<RwLock<ConfluxStateMachine>> {
+        &self.inner
+    }
 }
 
 impl Clone for ConfluxStateMachineWrapper {
@@ -215,71 +235,8 @@ impl Clone for ConfluxStateMachineWrapper {
     }
 }
 
-/*
-impl RaftStateMachine<TypeConfig> for ConfluxStateMachineWrapper {
-    async fn applied_state(
-        &mut self,
-    ) -> Result<
-        (Option<LogId<NodeId>>, StoredMembership<NodeId, Node>),
-        StorageError<NodeId>,
-    > {
-        let (last_applied, membership) = self.get_state_info().await;
-        Ok((last_applied, membership))
-    }
-
-    async fn apply<I>(&mut self, entries: I) -> Result<Vec<ClientWriteResponse>, StorageError<NodeId>>
-    where
-        I: IntoIterator<Item = Entry<TypeConfig>> + OptionalSend,
-    {
-        let entries: Vec<_> = entries.into_iter().collect();
-        let mut sm = self.inner.write().await;
-        sm.apply_entries(&entries).await
-    }
-
-    async fn begin_receiving_snapshot(
-        &mut self,
-    ) -> Result<Box<<TypeConfig as openraft::RaftTypeConfig>::SnapshotData>, StorageError<NodeId>> {
-        debug!("Beginning to receive snapshot");
-        Ok(Box::new(std::io::Cursor::new(Vec::new())))
-    }
-
-    async fn install_snapshot(
-        &mut self,
-        meta: &SnapshotMeta<NodeId, Node>,
-        snapshot: Box<<TypeConfig as openraft::RaftTypeConfig>::SnapshotData>,
-    ) -> Result<(), StorageError<NodeId>> {
-        debug!("Installing snapshot: {:?}", meta);
-        
-        let data = snapshot.into_inner();
-        let mut sm = self.inner.write().await;
-        sm.restore_from_snapshot(&data).await?;
-        
-        info!("Snapshot installed successfully");
-        Ok(())
-    }
-
-    async fn get_current_snapshot(
-        &mut self,
-    ) -> Result<Option<Snapshot<TypeConfig>>, StorageError<NodeId>> {
-        debug!("Getting current snapshot");
-        
-        let mut builder = ConfluxSnapshotBuilder::new(self.inner.clone());
-        match builder.build_snapshot().await {
-            Ok(snapshot) => Ok(Some(snapshot)),
-            Err(e) => {
-                error!("Failed to build snapshot: {}", e);
-                Ok(None)
-            }
-        }
-    }
-
-    type SnapshotBuilder = ConfluxSnapshotBuilder;
-
-    async fn get_snapshot_builder(&mut self) -> Self::SnapshotBuilder {
-        ConfluxSnapshotBuilder::new(self.inner.clone())
-    }
-}
-*/
+// RaftStateMachine trait 现在在 raft_storage_v2.rs 中实现
+// 这避免了重复实现的问题
 
 /// 快照构建器实现
 #[derive(Debug)]
@@ -288,7 +245,7 @@ pub struct ConfluxSnapshotBuilder {
 }
 
 impl ConfluxSnapshotBuilder {
-    fn new(state_machine: Arc<RwLock<ConfluxStateMachine>>) -> Self {
+    pub fn new(state_machine: Arc<RwLock<ConfluxStateMachine>>) -> Self {
         Self { state_machine }
     }
 }
@@ -296,13 +253,13 @@ impl ConfluxSnapshotBuilder {
 impl openraft::storage::RaftSnapshotBuilder<TypeConfig> for ConfluxSnapshotBuilder {
     async fn build_snapshot(&mut self) -> Result<Snapshot<TypeConfig>, StorageError<NodeId>> {
         debug!("Building snapshot");
-        
+
         let (data, last_applied, membership) = {
             let sm = self.state_machine.read().await;
             let data = sm.get_state().await?;
             (data, sm.last_applied_log, sm.last_membership.clone())
         };
-        
+
         let meta = SnapshotMeta {
             last_log_id: last_applied,
             last_membership: membership,
@@ -320,12 +277,13 @@ impl openraft::storage::RaftSnapshotBuilder<TypeConfig> for ConfluxSnapshotBuild
 mod tests {
     use super::*;
     use crate::raft::store::Store;
-    use openraft::{Entry, EntryPayload, LogId, CommittedLeaderId};
+    use openraft::{CommittedLeaderId, Entry, EntryPayload, LogId};
     use tempfile::TempDir;
 
     async fn create_test_state_machine() -> (ConfluxStateMachine, TempDir) {
         let temp_dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(Store::new(temp_dir.path().to_str().unwrap()).await.unwrap());
+        let (store, _event_receiver) = Store::new(temp_dir.path().to_str().unwrap()).await.unwrap();
+        let store = Arc::new(store);
         let state_machine = ConfluxStateMachine::new(store);
         (state_machine, temp_dir)
     }
@@ -339,7 +297,7 @@ mod tests {
     #[tokio::test]
     async fn test_blank_entry_application() {
         let (mut state_machine, _temp_dir) = create_test_state_machine().await;
-        
+
         let entry = Entry {
             log_id: LogId::new(CommittedLeaderId::new(1, 1), 1),
             payload: EntryPayload::Blank,

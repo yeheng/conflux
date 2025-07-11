@@ -18,8 +18,7 @@ tokio = { version = "1.0", features = ["full"] }
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
-toml = "0.8.6"
+toml = "0.9"
 
 # Error handling
 anyhow = "1.0"
@@ -30,7 +29,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Raft consensus
-openraft = { version = "0.9", features = ["serde"] }
+openraft = { version = "0.9.18", features = ["serde", "storage-v2"] }
 
 # Storage
 rocksdb = "0.23"
@@ -54,7 +53,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Configuration
-config = "0.15"
+config = "0.15.13"
 
 # Async traits
 async-trait = "0.1"
@@ -69,7 +68,7 @@ ring = "0.17"
 reqwest = { version = "0.12", features = ["json"] }
 
 # System utilities
-num_cpus = "1.16"
+num_cpus = "1.17"
 
 # Binary serialization
 bincode = "2.0"
@@ -78,8 +77,11 @@ bincode = "2.0"
 sha2 = "0.10"
 
 # Random number generation
-fastrand = "2.0"
+fastrand = "2.3"
+
+# Temporary files for testing and benchmarks
+tempfile = "3.8"
 
 [dev-dependencies]
-tempfile = "3.8"
 tokio-test = "0.4"
+tracing-test = "0.2"

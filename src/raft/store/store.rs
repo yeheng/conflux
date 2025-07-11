@@ -1,14 +1,15 @@
 use crate::error::Result;
 use super::constants::*;
-use super::types::{Store, ConfluxStateMachine};
+use super::types::{Store, StateChangeEvent};
 use rocksdb::{ColumnFamilyDescriptor, Options as RocksDbOptions, DB};
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, RwLock, mpsc};
 impl Store {
     /// Create a new Store instance with RocksDB backend
-    pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+    /// Returns the store and the event receiver for state machine communication
+    pub async fn new<P: AsRef<Path>>(path: P) -> Result<(Self, mpsc::Receiver<StateChangeEvent>)> {
         let (change_notifier, _) = broadcast::channel(1000);
 
         // Create RocksDB options
@@ -29,6 +30,9 @@ impl Store {
             crate::error::ConfluxError::storage(format!("Failed to open RocksDB: {}", e))
         })?;
 
+        // 创建事件通道用于与状态机通信
+        let (event_sender, event_receiver) = mpsc::channel(1000);
+
         let store = Self {
             db: Arc::new(db),
             configurations: Arc::new(RwLock::new(BTreeMap::new())),
@@ -39,15 +43,16 @@ impl Store {
             logs: Arc::new(RwLock::new(BTreeMap::new())),
             last_purged_log_id: Arc::new(RwLock::new(None)),
             vote: Arc::new(RwLock::new(None)),
-            state_machine: Arc::new(RwLock::new(ConfluxStateMachine::default())),
+            // 移除 state_machine 字段，使用事件通信
             current_snapshot: Arc::new(RwLock::new(None)),
             snapshot_idx: Arc::new(Mutex::new(0)),
+            event_sender: Some(event_sender),
         };
 
         // Load existing data from RocksDB into memory cache
         store.load_from_disk().await?;
 
-        Ok(store)
+        Ok((store, event_receiver))
     }
 
 }

@@ -1,11 +1,10 @@
 use crate::raft::types::*;
-use super::types::{Store, ConfluxSnapshot};
+use super::types::Store;
 use openraft::{
-    storage::{RaftLogReader, RaftSnapshotBuilder, Snapshot, SnapshotMeta},
+    storage::RaftLogReader,
     Entry, OptionalSend, StorageError, StorageIOError,
 };
 use std::fmt::Debug;
-use std::io::Cursor;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
@@ -29,6 +28,9 @@ impl RaftLogReader<TypeConfig> for Arc<Store> {
 }
 
 // Implement RaftSnapshotBuilder for Arc<Store>
+// 注意：这个实现现在已经移到了raft_storage_v2.rs中
+// 这里暂时注释掉避免编译错误，因为state_machine字段已经被移除
+/* 
 impl RaftSnapshotBuilder<TypeConfig> for Arc<Store> {
     async fn build_snapshot(
         &mut self,
@@ -79,3 +81,4 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<Store> {
         })
     }
 }
+*/

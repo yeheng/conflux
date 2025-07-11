@@ -150,8 +150,7 @@ impl Store {
         })?;
 
         // Load next_config_id (key: 0x01)
-        let next_config_id_key = vec![0x01];
-        if let Some(value) = self.db.get_cf(cf_meta, &next_config_id_key).map_err(|e| {
+        if let Some(value) = self.db.get_cf(cf_meta, &[0x01]).map_err(|e| {
             crate::error::ConfluxError::storage(format!("Failed to read next_config_id: {}", e))
         })? {
             if value.len() >= 8 {
@@ -335,12 +334,18 @@ pub struct StorageStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use tempfile::TempDir;
+
+    async fn create_test_store() -> (Arc<Store>, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let (store, _) = Store::new(temp_dir.path()).await.unwrap();
+        (Arc::new(store), temp_dir)
+    }
 
     #[tokio::test]
     async fn test_load_from_disk() {
-        let temp_dir = TempDir::new().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         // Test loading from empty database
         let result = store.load_from_disk().await;
@@ -349,8 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_persist_and_load_config() {
-        let temp_dir = TempDir::new().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         // Create test config
         let namespace = ConfigNamespace {
@@ -393,8 +397,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_storage_stats() {
-        let temp_dir = TempDir::new().unwrap();
-        let store = Store::new(temp_dir.path()).await.unwrap();
+        let (store, _temp_dir) = create_test_store().await;
 
         let stats = store.get_storage_stats().await.unwrap();
         assert_eq!(stats.configs_count, 0);
@@ -403,3 +406,4 @@ mod tests {
         assert_eq!(stats.next_config_id, 1);
     }
 }
+

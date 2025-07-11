@@ -6,12 +6,11 @@
 use crate::raft::types::*;
 use crate::raft::store::Store;
 use openraft::{
-    storage::{LogState, RaftLogStorage},
-    Entry, LogId, OptionalSend, RaftLogReader, StorageError, Vote,
+    Entry, OptionalSend, RaftLogReader, StorageError,
 };
 use std::ops::RangeBounds;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 /// 独立的Raft日志存储实现
 /// 
@@ -98,45 +97,5 @@ impl openraft::storage::RaftLogReader<TypeConfig> for ConfluxLogReader {
         
         debug!("Retrieved {} log entries", entries.len());
         Ok(entries)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::raft::store::Store;
-    use openraft::{Entry, EntryPayload, LogId, CommittedLeaderId};
-    use tempfile::TempDir;
-
-    async fn create_test_storage() -> (openraft::storage::Adaptor<TypeConfig, Arc<Store>>, openraft::storage::Adaptor<TypeConfig, Arc<Store>>, TempDir) {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(Store::new(temp_dir.path().to_str().unwrap()).await.unwrap());
-        let (log_storage, state_machine) = openraft::storage::Adaptor::new(store);
-        (log_storage, state_machine, temp_dir)
-    }
-
-    #[tokio::test]
-    async fn test_log_storage_creation() {
-        let (_log_storage, _state_machine, _temp_dir) = create_test_storage().await;
-        // 测试创建成功即可，因为我们现在使用Adaptor
-    }
-
-    #[tokio::test]
-    async fn test_append_and_read_logs() {
-        // 暂时跳过这个测试，因为LogFlushed的构造比较复杂
-        // 在实际使用中，openraft会提供正确的callback
-        // TODO: 实现完整的测试
-    }
-
-    #[tokio::test]
-    async fn test_vote_storage() {
-        // 暂时跳过这个测试，专注于核心功能
-        // TODO: 实现完整的测试
-    }
-
-    #[tokio::test]
-    async fn test_purge_logs() {
-        // 暂时跳过这个测试，专注于核心功能
-        // TODO: 实现完整的测试
     }
 }

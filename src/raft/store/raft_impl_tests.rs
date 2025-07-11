@@ -7,8 +7,8 @@ mod tests {
 
     async fn create_test_store() -> (Arc<Store>, TempDir) {
         let temp_dir = TempDir::new().unwrap();
-        let store = Arc::new(Store::new(temp_dir.path()).await.unwrap());
-        (store, temp_dir)
+        let (store, _) = Store::new(temp_dir.path()).await.unwrap();
+        (Arc::new(store), temp_dir)
     }
 
     #[tokio::test]
