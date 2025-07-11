@@ -11,3 +11,4 @@
 tarpaulin*
 .augment
 .mcp.json
+.claude
