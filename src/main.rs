@@ -1,6 +1,9 @@
+mod auth;
 mod config;
 mod error;
 mod raft;
+mod protocol;
+mod app;
 
 use anyhow::Result;
 use config::AppConfig;

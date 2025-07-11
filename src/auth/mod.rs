@@ -91,6 +91,13 @@ pub mod actions {
     pub const WRITE: &str = "write";
     pub const DELETE: &str = "delete";
     pub const ADMIN: &str = "admin";
+    
+    // Raft cluster operations
+    pub const CLUSTER_ADD_NODE: &str = "cluster:add_node";
+    pub const CLUSTER_REMOVE_NODE: &str = "cluster:remove_node";
+    pub const CLUSTER_VIEW_METRICS: &str = "cluster:view_metrics";
+    pub const CLUSTER_CHANGE_CONFIG: &str = "cluster:change_config";
+    pub const CLUSTER_ADMIN: &str = "cluster:admin";
 }
 
 /// 常用的角色类型
@@ -99,6 +106,11 @@ pub mod roles {
     pub const TENANT_ADMIN: &str = "tenant_admin";
     pub const DEVELOPER: &str = "developer";
     pub const VIEWER: &str = "viewer";
+    
+    // Raft cluster roles
+    pub const CLUSTER_ADMIN: &str = "cluster_admin";
+    pub const CLUSTER_OPERATOR: &str = "cluster_operator";
+    pub const CLUSTER_VIEWER: &str = "cluster_viewer";
 }
 
 /// 资源路径构建器
@@ -128,6 +140,26 @@ impl ResourcePath {
     /// 构建管理资源路径
     pub fn admin(tenant: &str, resource: &str) -> String {
         format!("/tenants/{}/admin/{}", tenant, resource)
+    }
+    
+    /// 构建集群资源路径
+    pub fn cluster(tenant: &str) -> String {
+        format!("/tenants/{}/cluster", tenant)
+    }
+    
+    /// 构建集群节点资源路径
+    pub fn cluster_node(tenant: &str, node_id: u64) -> String {
+        format!("/tenants/{}/cluster/nodes/{}", tenant, node_id)
+    }
+    
+    /// 构建集群指标资源路径
+    pub fn cluster_metrics(tenant: &str) -> String {
+        format!("/tenants/{}/cluster/metrics", tenant)
+    }
+    
+    /// 构建集群配置资源路径
+    pub fn cluster_config(tenant: &str) -> String {
+        format!("/tenants/{}/cluster/config", tenant)
     }
 }
 

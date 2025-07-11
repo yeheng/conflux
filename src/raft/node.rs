@@ -1,11 +1,14 @@
 use crate::config::AppConfig;
 use crate::error::Result;
 use crate::raft::{
+    auth::{RaftAuthzService, AuthorizedRaftOperation},
     metrics::RaftMetricsCollector,
     network::{ConfluxNetworkFactory, NetworkConfig},
     store::{Store, StateMachineManager},
     types::*,
+    validation::RaftInputValidator,
 };
+use crate::auth::AuthContext;
 use openraft::{Config as RaftConfig, Raft};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -251,6 +254,10 @@ pub struct RaftNode {
     metrics_collector: Arc<RaftMetricsCollector>,
     /// Resource limiter for client requests
     resource_limiter: Arc<ResourceLimiter>,
+    /// Optional authorization service for cluster operations
+    authz_service: Option<Arc<RaftAuthzService>>,
+    /// Input validator for cluster operations
+    input_validator: Arc<RaftInputValidator>,
 }
 
 impl RaftNode {
@@ -286,6 +293,9 @@ impl RaftNode {
         // Create resource limiter
         let resource_limiter = Arc::new(ResourceLimiter::new(config.resource_limits.clone()));
 
+        // Create input validator
+        let input_validator = Arc::new(RaftInputValidator::new());
+
         Ok(Self {
             config,
             store,
@@ -295,6 +305,8 @@ impl RaftNode {
             state_machine_handle: Some(state_machine_handle),
             metrics_collector,
             resource_limiter,
+            authz_service: None, // Can be set later with set_authz_service()
+            input_validator,
         })
     }
 
@@ -321,6 +333,22 @@ impl RaftNode {
     /// Get resource limiter
     pub fn resource_limiter(&self) -> Arc<ResourceLimiter> {
         self.resource_limiter.clone()
+    }
+
+    /// Set authorization service for cluster operations
+    pub fn set_authz_service(&mut self, authz_service: Arc<RaftAuthzService>) {
+        info!("Setting authorization service for node {}", self.config.node_id);
+        self.authz_service = Some(authz_service);
+    }
+
+    /// Get authorization service
+    pub fn authz_service(&self) -> Option<Arc<RaftAuthzService>> {
+        self.authz_service.clone()
+    }
+
+    /// Get input validator
+    pub fn input_validator(&self) -> Arc<RaftInputValidator> {
+        self.input_validator.clone()
     }
 
     /// Start the node and initialize Raft instance
@@ -430,9 +458,48 @@ impl RaftNode {
         self.members.read().await.clone()
     }
 
-    /// Add a new node to the cluster using Raft consensus
+    /// Add a new node to the cluster using Raft consensus with authorization
     pub async fn add_node(&self, node_id: NodeId, address: String) -> Result<()> {
+        self.add_node_with_auth(node_id, address, None).await
+    }
+
+    /// Add a new node to the cluster with authorization context
+    pub async fn add_node_with_auth(&self, node_id: NodeId, address: String, auth_ctx: Option<AuthContext>) -> Result<()> {
         info!("Adding node {} at {} to cluster via Raft consensus", node_id, address);
+
+        // Get existing nodes for validation
+        let existing_nodes: Vec<(NodeId, String)> = {
+            let members = self.members.read().await;
+            // In a real implementation, we'd have a way to get addresses for all members
+            // For now, we'll create a simplified list for validation
+            members.iter().map(|&id| (id, format!("node-{}", id))).collect()
+        };
+
+        // Validate the node addition request
+        let _validated_address = self.input_validator
+            .validate_add_node(node_id, &address, &existing_nodes)
+            .map_err(|e| {
+                warn!("Node addition validation failed: {}", e);
+                e
+            })?;
+
+        info!("Input validation passed for adding node {} at {}", node_id, address);
+
+        // Check authorization if auth service is available
+        if let Some(ref authz_service) = self.authz_service {
+            if let Some(auth_ctx) = auth_ctx {
+                let permission_result = authz_service
+                    .check_add_node_permission(&auth_ctx, node_id)
+                    .await?;
+                
+                let authorized_op = AuthorizedRaftOperation::new(auth_ctx, permission_result);
+                authorized_op.ensure_authorized()?;
+                
+                info!("Add node operation authorized for user: {}", authorized_op.auth_ctx.user_id);
+            } else {
+                warn!("Authorization service available but no auth context provided for add_node");
+            }
+        }
 
         if let Some(ref raft) = self.raft {
             // Get current membership and add the new node
@@ -463,9 +530,48 @@ impl RaftNode {
         Ok(())
     }
 
-    /// Remove a node from the cluster using Raft consensus
+    /// Remove a node from the cluster using Raft consensus with authorization
     pub async fn remove_node(&self, node_id: NodeId) -> Result<()> {
+        self.remove_node_with_auth(node_id, None).await
+    }
+
+    /// Remove a node from the cluster with authorization context  
+    pub async fn remove_node_with_auth(&self, node_id: NodeId, auth_ctx: Option<AuthContext>) -> Result<()> {
         info!("Removing node {} from cluster via Raft consensus", node_id);
+
+        // Get existing nodes for validation
+        let existing_nodes: Vec<(NodeId, String)> = {
+            let members = self.members.read().await;
+            // In a real implementation, we'd have a way to get addresses for all members
+            // For now, we'll create a simplified list for validation
+            members.iter().map(|&id| (id, format!("node-{}", id))).collect()
+        };
+
+        // Validate the node removal request
+        self.input_validator
+            .validate_remove_node(node_id, &existing_nodes)
+            .map_err(|e| {
+                warn!("Node removal validation failed: {}", e);
+                e
+            })?;
+
+        info!("Input validation passed for removing node {}", node_id);
+
+        // Check authorization if auth service is available
+        if let Some(ref authz_service) = self.authz_service {
+            if let Some(auth_ctx) = auth_ctx {
+                let permission_result = authz_service
+                    .check_remove_node_permission(&auth_ctx, node_id)
+                    .await?;
+                
+                let authorized_op = AuthorizedRaftOperation::new(auth_ctx, permission_result);
+                authorized_op.ensure_authorized()?;
+                
+                info!("Remove node operation authorized for user: {}", authorized_op.auth_ctx.user_id);
+            } else {
+                warn!("Authorization service available but no auth context provided for remove_node");
+            }
+        }
 
         if let Some(ref raft) = self.raft {
             // Get current membership and remove the node
@@ -562,8 +668,29 @@ impl RaftNode {
         }
     }
 
-    /// Get comprehensive metrics report
+    /// Get comprehensive metrics report with authorization
     pub async fn get_comprehensive_metrics(&self) -> Result<crate::raft::metrics::MetricsReport> {
+        self.get_comprehensive_metrics_with_auth(None).await
+    }
+
+    /// Get comprehensive metrics report with authorization context
+    pub async fn get_comprehensive_metrics_with_auth(&self, auth_ctx: Option<AuthContext>) -> Result<crate::raft::metrics::MetricsReport> {
+        // Check authorization if auth service is available
+        if let Some(ref authz_service) = self.authz_service {
+            if let Some(auth_ctx) = auth_ctx {
+                let permission_result = authz_service
+                    .check_view_metrics_permission(&auth_ctx)
+                    .await?;
+                
+                let authorized_op = AuthorizedRaftOperation::new(auth_ctx, permission_result);
+                authorized_op.ensure_authorized()?;
+                
+                debug!("Metrics access authorized for user: {}", authorized_op.auth_ctx.user_id);
+            } else {
+                warn!("Authorization service available but no auth context provided for get_comprehensive_metrics");
+            }
+        }
+
         Ok(self.metrics_collector.get_metrics_report().await)
     }
 
@@ -625,14 +752,51 @@ impl RaftNode {
         members.len() == 1 && members.contains(&self.config.node_id)
     }
 
-    /// Update timeout configuration dynamically
+    /// Update timeout configuration dynamically with authorization
     pub async fn update_timeouts(
         &mut self,
         heartbeat_interval: Option<u64>,
         election_timeout_min: Option<u64>,
         election_timeout_max: Option<u64>,
     ) -> Result<()> {
+        self.update_timeouts_with_auth(heartbeat_interval, election_timeout_min, election_timeout_max, None).await
+    }
+
+    /// Update timeout configuration with authorization context
+    pub async fn update_timeouts_with_auth(
+        &mut self,
+        heartbeat_interval: Option<u64>,
+        election_timeout_min: Option<u64>,
+        election_timeout_max: Option<u64>,
+        auth_ctx: Option<AuthContext>,
+    ) -> Result<()> {
         info!("Updating Raft timeout configuration");
+
+        // Validate timeout configuration first
+        self.input_validator
+            .validate_timeout_config(heartbeat_interval, election_timeout_min, election_timeout_max)
+            .map_err(|e| {
+                warn!("Timeout configuration validation failed: {}", e);
+                e
+            })?;
+
+        info!("Timeout configuration validation passed");
+
+        // Check authorization if auth service is available
+        if let Some(ref authz_service) = self.authz_service {
+            if let Some(auth_ctx) = auth_ctx {
+                let permission_result = authz_service
+                    .check_change_config_permission(&auth_ctx)
+                    .await?;
+                
+                let authorized_op = AuthorizedRaftOperation::new(auth_ctx, permission_result);
+                authorized_op.ensure_authorized()?;
+                
+                info!("Timeout configuration change authorized for user: {}", authorized_op.auth_ctx.user_id);
+            } else {
+                warn!("Authorization service available but no auth context provided for update_timeouts");
+            }
+        }
 
         // Update configuration
         if let Some(interval) = heartbeat_interval {

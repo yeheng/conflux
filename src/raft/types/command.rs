@@ -1,4 +1,4 @@
-use crate::raft::{ConfigFormat, Release};
+use crate::raft::types::{ConfigFormat, Release};
 
 use super::config::ConfigNamespace;
 use serde::{Deserialize, Serialize};

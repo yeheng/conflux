@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::raft::*;
-    use crate::raft::types::{ConfigNamespace, ConfigFormat, Release};
+    use crate::raft::types::{ConfigNamespace, ConfigFormat, Release, RaftCommand, ClientRequest, ClientWriteResponse};
     use std::collections::BTreeMap;
 
     #[test]
