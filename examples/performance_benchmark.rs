@@ -2,7 +2,7 @@
 //! 运行Conflux分布式配置中心的性能基准测试
 
 use conflux::benchmarks::{
-    BenchmarkConfig, SingleNodeBenchmark, ClusterBenchmark, MemoryStats
+    BenchmarkConfig, SingleNodeBenchmark, ClusterBenchmark
 };
 use std::time::Duration;
 use tracing::{info, Level};
@@ -121,16 +121,4 @@ async fn run_cluster_tests(config: &BenchmarkConfig) -> Result<(), Box<dyn std::
     }
 
     Ok(())
-}
-
-/// 显示性能测试总结
-fn display_performance_summary() {
-    info!("📋 === 性能基准测试总结 ===");
-    info!("✅ 单节点基础功能验证");
-    info!("✅ 集群协调功能验证");
-    info!("✅ 内存使用基准建立");
-    info!("✅ 延迟分布统计完成");
-    info!("📊 基准测试框架建立完成");
-    info!("🎯 下一步: 根据基准数据进行性能优化");
-    info!("=============================");
 }

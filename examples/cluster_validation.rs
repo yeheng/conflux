@@ -2,6 +2,7 @@
 //! 这个程序创建一个最小化的3节点集群验证
 
 use conflux::config::{AppConfig, StorageConfig};
+use conflux::raft::node::ResourceLimits;
 use conflux::raft::{
     network::NetworkConfig,
     node::{NodeConfig, RaftNode},
@@ -17,9 +18,7 @@ use tracing_subscriber;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     info!("🚀 开始验证3节点Raft集群原型");
 
@@ -52,6 +51,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ..Default::default()
             },
             network_config: network_config.clone(),
+            heartbeat_interval: 500,
+            election_timeout_min: 300,
+            election_timeout_max: 600,
+            resource_limits: ResourceLimits::default(),
         },
         NodeConfig {
             node_id: 2,
@@ -63,6 +66,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ..Default::default()
             },
             network_config: network_config.clone(),
+            heartbeat_interval: 500,
+            election_timeout_min: 300,
+            election_timeout_max: 600,
+            resource_limits: ResourceLimits::default(),
         },
         NodeConfig {
             node_id: 3,
@@ -74,6 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ..Default::default()
             },
             network_config: network_config.clone(),
+            heartbeat_interval: 500,
+            election_timeout_min: 300,
+            election_timeout_max: 600,
+            resource_limits: ResourceLimits::default(),
         },
     ];
 
@@ -98,7 +109,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 创建节点
     let mut nodes = Vec::new();
-    for (i, (node_config, app_config)) in node_configs.into_iter().zip(app_configs.iter()).enumerate() {
+    for (i, (node_config, app_config)) in
+        node_configs.into_iter().zip(app_configs.iter()).enumerate()
+    {
         info!("🏗️  创建节点 {}", i + 1);
         let node = RaftNode::new(node_config, app_config).await?;
         nodes.push(node);
@@ -128,9 +141,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let node_id = node.node_id();
         let address = node.address();
         let is_leader = node.is_leader().await;
-        
-        info!("📊 节点 {} (ID: {}, 地址: {}) - 领导者: {}", 
-              i + 1, node_id, address, is_leader);
+
+        info!(
+            "📊 节点 {} (ID: {}, 地址: {}) - 领导者: {}",
+            i + 1,
+            node_id,
+            address,
+            is_leader
+        );
 
         // 尝试获取metrics
         match node.get_metrics().await {
