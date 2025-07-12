@@ -92,7 +92,7 @@ mod performance_tests {
     #[tokio::test]
     async fn benchmark_validation_performance() {
         let validator = RaftInputValidator::new();
-        
+
         // Benchmark node ID validation
         let start = Instant::now();
         for i in 1..=10000 {

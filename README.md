@@ -91,16 +91,19 @@ graph TD
 ## 📚 文档索引
 
 ### 🎯 快速开始
+
 - [安装指南](docs/installation.md) - 快速部署和配置
 - [快速开始](docs/quickstart.md) - 5分钟上手指南
 - [基本概念](docs/concepts.md) - 核心概念和术语
 
 ### 🏛️ 架构设计
+
 - [📋 项目概览](docs/overview.md) - 系统整体架构和组件说明
 - [🏗️ 高层设计](docs/high-level-design.md) - 详细的技术架构方案
 - [📊 数据模型](docs/data-model.md) - 核心数据结构和关系
 
 ### 🔧 核心组件
+
 - [⚡ 核心共识层](docs/Core%20Consensus%20Layer.md) - Raft 共识算法实现
 - [🗄️ 状态机](docs/State%20Machine.md) - 配置状态管理
 - [💾 存储层](docs/Storage.md) - RocksDB 存储设计
@@ -108,6 +111,7 @@ graph TD
 - [🔌 协议层](docs/Protocol%20Layer.md) - 多协议支持架构
 
 ### 🚀 功能特性
+
 - [📝 配置管理](docs/Config%20Managment.md) - 配置的 CRUD 操作
 - [📋 配置即代码](docs/Config-as-Code.md) - GitOps 和 Terraform 集成
 - [🔄 版本控制](docs/versioning.md) - 配置版本管理
@@ -116,11 +120,13 @@ graph TD
 - [🔐 安全加密](docs/Security%20&%20Encryption.md) - 端到端安全方案
 
 ### 🔐 安全与权限
+
 - [🛡️ RBAC 权限](docs/RBAC.md) - 基于角色的访问控制
 - [🏢 多租户](docs/Multi-tenancy%20&%20Quota%20Management.md) - 租户隔离和配额管理
 - [✅ 审批流程](docs/Approval%20Workflow.md) - 配置变更审批
 
 ### 🛠️ 开发与运维
+
 - [💻 客户端 SDK](docs/Client%20SDK.md) - 多语言 SDK 使用指南
 - [⌨️ 命令行工具](docs/CLI.md) - CLI 工具使用手册
 - [🚀 部署分发](docs/Packaging,%20Deployment%20&%20Distribution.md) - Docker/K8s 部署
@@ -129,6 +135,7 @@ graph TD
 - [🗑️ 数据生命周期](docs/Data%20Lifecycle%20&%20Garbage%20Collection.md) - 数据清理和归档
 
 ### 📋 项目管理
+
 - [📝 任务清单](docs/task.md) - 开发里程碑和任务分解
 - [🎯 技术规范](rust.md) - Rust 开发规范和原则
 
@@ -355,13 +362,3 @@ curl -X PUT \
 - [Tokio](https://tokio.rs/) - 异步运行时
 - [Axum](https://github.com/tokio-rs/axum) - Web 框架
 - [RocksDB](https://rocksdb.org/) - 存储引擎
-
----
-
-**⭐ 如果这个项目对你有帮助，请给我们一个 Star！**
-
-**📧 联系我们**: [team@conflux.rs](mailto:team@conflux.rs)
-
-**🌐 官方网站**: [https://conflux.rs](https://conflux.rs)
-
-**📖 在线文档**: [https://docs.conflux.rs](https://docs.conflux.rs)

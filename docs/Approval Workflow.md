@@ -184,7 +184,8 @@ sequenceDiagram
         API->>Raft: Submit RaftCommand::CreateProposal(plan)
         Raft->>SM: apply(CreateProposal)
         SM->>SM: Create new ReleaseProposal in PENDING state
-        SM-->>Raft-->>API: Ok, proposal_id="prop-123"
+        SM-->>Raft: Ok, proposal_id="prop-123"
+        Raft-->>API: Ok, proposal_id="prop-123"
         API->>WH: Trigger Webhook for PROPOSAL_CREATED event
         API-->>User: 202 Accepted, with proposal_id
         WH->>WH: (Async) Send POST to external system (e.g., Jira)
