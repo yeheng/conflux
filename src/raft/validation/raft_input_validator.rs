@@ -16,7 +16,7 @@ use crate::raft::{validation::ComprehensiveValidator, ValidationConfig};
 /// let result = validator.validate_add_node(1, "127.0.0.1:8080", &[]);
 /// ```
 pub struct RaftInputValidator {
-    comprehensive_validator: ComprehensiveValidator,
+    pub comprehensive_validator: ComprehensiveValidator,
 }
 
 impl RaftInputValidator {

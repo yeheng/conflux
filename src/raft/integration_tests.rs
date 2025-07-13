@@ -4,7 +4,6 @@
 mod integration_tests {
     use crate::auth::AuthContext;
     use crate::config::AppConfig;
-    use crate::raft::validation::NodeValidator;
     use crate::raft::{
         auth::RaftAuthzService,
         node::{NodeConfig, RaftNode, ResourceLimits},
@@ -295,13 +294,31 @@ mod integration_tests {
         let custom_validator = RaftInputValidator::with_config(custom_config);
 
         // Test custom validation behavior
-        assert!(custom_validator.validate_node_id(5).is_err()); // Below minimum
-        assert!(custom_validator.validate_node_id(10).is_ok()); // At minimum
-        assert!(custom_validator.validate_node_id(100).is_ok()); // At maximum
-        assert!(custom_validator.validate_node_id(101).is_err()); // Above maximum
+        assert!(custom_validator
+            .comprehensive_validator
+            .node_validator
+            .validate_node_id(5)
+            .is_err()); // Below minimum
+        assert!(custom_validator
+            .comprehensive_validator
+            .node_validator
+            .validate_node_id(10)
+            .is_ok()); // At minimum
+        assert!(custom_validator
+            .comprehensive_validator
+            .node_validator
+            .validate_node_id(100)
+            .is_ok()); // At maximum
+        assert!(custom_validator
+            .comprehensive_validator
+            .node_validator
+            .validate_node_id(101)
+            .is_err()); // Above maximum
 
         // Test localhost restriction
         assert!(custom_validator
+            .comprehensive_validator
+            .node_validator
             .validate_node_address("127.0.0.1:8080")
             .is_err());
 
@@ -410,10 +427,10 @@ mod integration_tests {
         let _result = node
             .add_node_with_auth(2, "127.0.0.1:8092".to_string(), Some(auth_ctx.clone()))
             .await;
-        // Result depends on Raft networking, but should not fail due to missing auth
+        // The Result depends on Raft networking, but should not fail due to missing auth
 
         let _result = node.remove_node_with_auth(2, Some(auth_ctx.clone())).await;
-        // Result depends on whether node 2 was actually added
+        // The Result depends on whether node 2 was actually added
 
         let result = node
             .update_timeouts_with_auth(Some(100), Some(200), Some(400), Some(auth_ctx))
@@ -425,24 +442,34 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_stress_validation_operations() {
-        let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
+        let validator = RaftInputValidator::new();
 
         // Stress test validation with many operations
         for i in 1..=1000 {
-            assert!(validator.validate_node_id(i).is_ok());
+            assert!(validator
+                .comprehensive_validator
+                .node_validator
+                .validate_node_id(i)
+                .is_ok());
         }
 
         // Test many address validations
         for i in 1..=100 {
             let address = format!("192.168.1.{}:8080", i);
-            assert!(validator.validate_node_address(&address).is_ok());
+            assert!(validator
+                .comprehensive_validator
+                .node_validator
+                .validate_node_address(&address)
+                .is_ok());
         }
 
         // Test cluster size validation with various sizes
         for current_size in 0..=50 {
             for adding in 1..=5 {
-                let result = validator.validate_cluster_size(current_size, adding);
+                let result = validator
+                    .comprehensive_validator
+                    .cluster_validator
+                    .validate_cluster_size(current_size, adding);
                 if current_size + adding <= 100 {
                     assert!(result.is_ok());
                 } else {

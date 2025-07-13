@@ -13,34 +13,34 @@ use crate::raft::types::NodeId;
 use tracing::debug;
 
 /// 综合验证器
-/// 
+///
 /// 组合所有验证器，提供完整的验证功能
 pub struct ComprehensiveValidator {
-    config: ValidationConfig,
-    node_validator: NodeValidator<'static>,
-    cluster_validator: ClusterValidator<'static>,
-    timeout_validator: TimeoutValidator,
+    pub config: ValidationConfig,
+    pub node_validator: NodeValidator<'static>,
+    pub cluster_validator: ClusterValidator<'static>,
+    pub timeout_validator: TimeoutValidator,
 }
 
 impl ComprehensiveValidator {
     /// 创建新的综合验证器
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `config` - 验证配置
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use conflux::raft::validation::{ValidationConfig, ComprehensiveValidator};
-    /// 
+    ///
     /// let config = ValidationConfig::default();
     /// let validator = ComprehensiveValidator::new(config);
     /// ```
     pub fn new(config: ValidationConfig) -> Self {
         // 使用Box来避免生命周期问题
         let config_ref = Box::leak(Box::new(config.clone()));
-        
+
         Self {
             config,
             node_validator: NodeValidator::new(config_ref),
@@ -50,28 +50,28 @@ impl ComprehensiveValidator {
     }
 
     /// 验证添加节点操作
-    /// 
+    ///
     /// 综合验证节点ID、地址、集群大小等
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `node_id` - 要添加的节点ID
     /// * `address` - 节点地址
     /// * `existing_nodes` - 现有节点列表 (节点ID, 地址)
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 如果验证通过返回解析后的地址，否则返回错误
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use conflux::raft::validation::{ValidationConfig, ComprehensiveValidator};
-    /// 
+    ///
     /// let config = ValidationConfig::default();
     /// let validator = ComprehensiveValidator::new(config);
     /// let existing_nodes = vec![(1, "127.0.0.1:8080".to_string())];
-    /// 
+    ///
     /// let result = validator.validate_add_node(2, "127.0.0.1:8081", &existing_nodes);
     /// assert!(result.is_ok());
     /// ```
@@ -105,27 +105,27 @@ impl ComprehensiveValidator {
     }
 
     /// 验证移除节点操作
-    /// 
+    ///
     /// 综合验证节点存在性、集群最小大小等
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `node_id` - 要移除的节点ID
     /// * `existing_nodes` - 现有节点列表
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 如果验证通过返回Ok(())，否则返回错误
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use conflux::raft::validation::{ValidationConfig, ComprehensiveValidator};
-    /// 
+    ///
     /// let config = ValidationConfig::default();
     /// let validator = ComprehensiveValidator::new(config);
     /// let existing_nodes = vec![(1, "127.0.0.1:8080".to_string()), (2, "127.0.0.1:8081".to_string())];
-    /// 
+    ///
     /// let result = validator.validate_remove_node(2, &existing_nodes);
     /// assert!(result.is_ok());
     /// ```
@@ -150,27 +150,27 @@ impl ComprehensiveValidator {
     }
 
     /// 验证超时配置
-    /// 
+    ///
     /// 验证心跳间隔和选举超时配置
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `heartbeat_interval` - 可选的心跳间隔
     /// * `election_timeout_min` - 可选的选举超时最小值
     /// * `election_timeout_max` - 可选的选举超时最大值
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 如果验证通过返回Ok(())，否则返回错误
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use conflux::raft::validation::{ValidationConfig, ComprehensiveValidator};
-    /// 
+    ///
     /// let config = ValidationConfig::default();
     /// let validator = ComprehensiveValidator::new(config);
-    /// 
+    ///
     /// let result = validator.validate_timeout_config(Some(100), Some(300), Some(600));
     /// assert!(result.is_ok());
     /// ```
@@ -193,26 +193,26 @@ impl ComprehensiveValidator {
     }
 
     /// 验证集群健康状态
-    /// 
+    ///
     /// 检查集群是否有足够的健康节点
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `total_nodes` - 总节点数
     /// * `healthy_nodes` - 健康节点数
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 如果集群健康返回Ok(())，否则返回错误
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use conflux::raft::validation::{ValidationConfig, ComprehensiveValidator};
-    /// 
+    ///
     /// let config = ValidationConfig::default();
     /// let validator = ComprehensiveValidator::new(config);
-    /// 
+    ///
     /// let result = validator.validate_cluster_health(5, 3);
     /// assert!(result.is_ok());
     /// ```
@@ -226,28 +226,28 @@ impl ComprehensiveValidator {
     }
 
     /// 获取集群建议
-    /// 
+    ///
     /// 基于当前集群状态提供优化建议
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `current_cluster_size` - 当前集群大小
     /// * `current_heartbeat` - 当前心跳间隔
     /// * `current_election_min` - 当前选举超时最小值
     /// * `network_latency_ms` - 网络延迟
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回集群优化建议
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```rust
     /// use conflux::raft::validation::{ValidationConfig, ComprehensiveValidator};
-    /// 
+    ///
     /// let config = ValidationConfig::default();
     /// let validator = ComprehensiveValidator::new(config);
-    /// 
+    ///
     /// let suggestions = validator.get_cluster_suggestions(4, 100, 300, 10);
     /// println!("Cluster suggestions: {:?}", suggestions);
     /// ```
@@ -302,27 +302,27 @@ impl ComprehensiveValidator {
             );
         }
 
-        debug!("Generated {} suggestions", 
-               suggestions.size_recommendations.len() + 
-               suggestions.timeout_recommendations.len() + 
+        debug!("Generated {} suggestions",
+               suggestions.size_recommendations.len() +
+               suggestions.timeout_recommendations.len() +
                suggestions.network_recommendations.len());
 
         suggestions
     }
 
     /// 获取验证配置
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回当前的验证配置
     pub fn get_config(&self) -> &ValidationConfig {
         &self.config
     }
 
     /// 更新验证配置
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `new_config` - 新的验证配置
     pub fn update_config(&mut self, new_config: ValidationConfig) {
         self.config = new_config;
@@ -332,7 +332,7 @@ impl ComprehensiveValidator {
 }
 
 /// 集群优化建议
-/// 
+///
 /// 包含各种类型的集群优化建议
 #[derive(Debug, Default)]
 pub struct ClusterSuggestions {
@@ -348,9 +348,9 @@ pub struct ClusterSuggestions {
 
 impl ClusterSuggestions {
     /// 检查是否有任何建议
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 如果有建议返回true，否则返回false
     pub fn has_suggestions(&self) -> bool {
         !self.size_recommendations.is_empty() ||
@@ -359,9 +359,9 @@ impl ClusterSuggestions {
     }
 
     /// 获取所有建议的总数
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// 返回建议总数
     pub fn total_suggestions(&self) -> usize {
         self.size_recommendations.len() +
@@ -419,7 +419,7 @@ mod tests {
         let validator = ComprehensiveValidator::new(config);
 
         let suggestions = validator.get_cluster_suggestions(4, 100, 300, 10);
-        
+
         // Should suggest odd cluster size
         assert!(suggestions.has_suggestions());
         assert!(suggestions.size_recommendations.iter().any(|s| s.contains("odd cluster size")));

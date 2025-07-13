@@ -5,10 +5,12 @@ mod error_handling_tests {
     use crate::auth::AuthContext;
     use crate::config::AppConfig;
     use crate::error::ConfluxError;
+    use crate::raft::validation::{ClusterValidator, NodeValidator};
     use crate::raft::{
         node::{NodeConfig, RaftNode, ResourceLimits},
         types::*,
-        validation::{RaftInputValidator, ValidationConfig},
+        validation::{RaftInputValidator, ValidationConfig}
+        ,
     };
 
     /// Helper function to create test app config
@@ -47,7 +49,8 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_invalid_node_id_error_handling() {
-        let validator = RaftInputValidator::new();
+        let config = ValidationConfig::default();
+        let validator = NodeValidator::new(&config);
 
         // Test various invalid node IDs
         let invalid_node_ids = vec![0, 65536, u64::MAX];
@@ -68,7 +71,8 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_invalid_address_error_handling() {
-        let validator = RaftInputValidator::new();
+        let config = ValidationConfig::default();
+        let validator = NodeValidator::new(&config);
 
         // Test various invalid addresses
         let invalid_addresses = vec![
@@ -100,7 +104,8 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_cluster_size_limit_error_handling() {
-        let validator = RaftInputValidator::new();
+        let config = ValidationConfig::default();
+        let validator = ClusterValidator::new(&config);
 
         // Test cluster size limits
         let result = validator.validate_cluster_size(100, 1);
@@ -117,7 +122,7 @@ mod error_handling_tests {
             max_cluster_size: 3,
             ..Default::default()
         };
-        let validator = RaftInputValidator::with_config(config);
+        let validator = ClusterValidator::new(&config);
 
         let result = validator.validate_cluster_size(3, 1);
         assert!(result.is_err());
@@ -140,7 +145,7 @@ mod error_handling_tests {
             (Some(0), None, None),        // Zero heartbeat
             (None, Some(0), None),        // Zero min timeout
             (None, None, Some(0)),        // Zero max timeout
-            (Some(15000), None, None),    // Too large heartbeat
+            (Some(15000), None, None),    // Too large a heartbeat
             (None, Some(50000), None),    // Too large min timeout
             (None, None, Some(70000)),    // Too large max timeout
             (Some(500), Some(300), None), // Heartbeat >= min
@@ -267,9 +272,9 @@ mod error_handling_tests {
             // Use up the memory
             let _permit1 = result.unwrap();
 
-            // This should fail due to memory limit
+            // This should fail due to the memory limit
             let _result2 = resource_limiter.check_request_allowed(5, None).await;
-            // Note: This test might be flaky due to timing, but demonstrates the concept
+            // Note: this test might be flaky due to timing, but demonstrates the concept
         }
     }
 
@@ -316,7 +321,7 @@ mod error_handling_tests {
         // Test operations with auth context but no auth service
         let auth_ctx = AuthContext::new("test_user".to_string(), "test_tenant".to_string());
 
-        // These should work when no auth service is configured (warnings logged)
+        // These should work when no auth service is configured warnings logged
         let _result = node
             .add_node_with_auth(2, "127.0.0.1:8082".to_string(), Some(auth_ctx.clone()))
             .await;
@@ -339,6 +344,9 @@ mod error_handling_tests {
         let result = validator.validate_add_node(1, "127.0.0.1:8080", &empty_cluster);
         assert!(result.is_ok());
 
+        let config = ValidationConfig::default();
+        let validator = NodeValidator::new(&config);
+
         // Test very long address
         let long_address = format!("{}:8080", "a".repeat(300));
         let result = validator.validate_node_address(&long_address);
@@ -351,12 +359,14 @@ mod error_handling_tests {
             max_cluster_size: 1,
             ..Default::default()
         };
-        let validator = RaftInputValidator::with_config(config);
+        let validator = NodeValidator::new(&config);
 
         // Test exact boundary
         assert!(validator.validate_node_id(1).is_ok());
         assert!(validator.validate_node_id(2).is_ok());
         assert!(validator.validate_node_id(3).is_err());
+
+        let validator = ClusterValidator::new(&config);
 
         // Test cluster size boundary
         assert!(validator.validate_cluster_size(0, 1).is_ok());
@@ -371,7 +381,7 @@ mod error_handling_tests {
             allow_private_ips: false,
             ..Default::default()
         };
-        let validator = RaftInputValidator::with_config(config);
+        let validator = NodeValidator::new(&config);
 
         // Test that common addresses are rejected
         let restricted_addresses = vec![
@@ -386,8 +396,8 @@ mod error_handling_tests {
             assert!(result.is_err(), "Address {} should be rejected", address);
         }
 
-        // Test that some public addresses would work (if format is valid)
-        // Note: We don't test real public IPs in unit tests
+        // Test that some public addresses would work if format is valid
+        // Note: we don't test real public IPs in unit tests
     }
 
     #[tokio::test]
@@ -446,12 +456,12 @@ mod error_handling_tests {
             let _ = node.remove_node(999).await; // Should fail gracefully
         }
 
-        // System should still respond to valid operations
+        // The System should still respond to valid operations
         let timeout_result = node.update_timeouts(Some(75), Some(200), Some(400)).await;
         assert!(timeout_result.is_ok());
 
         let metrics_result = node.get_metrics().await;
-        // Should not panic (may succeed or fail depending on Raft state)
+        // Should not panic may succeed or fail depending on Raft state
         match metrics_result {
             Ok(_) => {}  // Good
             Err(_) => {} // Also acceptable, as long as it doesn't panic
@@ -462,7 +472,8 @@ mod error_handling_tests {
 
     #[tokio::test]
     async fn test_error_message_consistency() {
-        let validator = RaftInputValidator::new();
+        let config = ValidationConfig::default();
+        let validator = NodeValidator::new(&config);
 
         // Test that similar errors have consistent message formats
         let node_id_errors = vec![
