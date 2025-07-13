@@ -23,3 +23,19 @@ mod raft_input_validator_tests;
 #[cfg(test)]
 #[path = "timeout_validation_test.rs"]
 mod timeouut_validation_tests;
+
+#[cfg(test)]
+#[path = "cluster_validation_test.rs"]
+mod cluster_validation_test;
+
+#[cfg(test)]
+#[path = "comprehensive_test.rs"]
+mod comprehensive_test;
+
+#[cfg(test)]
+#[path = "config_test.rs"]
+mod config_tests;
+
+#[cfg(test)]
+#[path = "node_validation_test.rs"]
+mod node_validation_tests;

@@ -3,22 +3,23 @@
 //! 提供组合多个验证器的综合验证功能
 
 use super::{
-    config::ValidationConfig,
-    node_validation::NodeValidator,
-    cluster_validation::ClusterValidator,
+    config::ValidationConfig, cluster_validation::ClusterValidator, node_validation::NodeValidator,
     timeout_validation::TimeoutValidator,
 };
-use crate::error::Result;
+use crate::error::{ConfluxError, Result};
 use crate::raft::types::NodeId;
+use std::collections::HashSet;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tracing::debug;
 
 /// 综合验证器
 ///
 /// 组合所有验证器，提供完整的验证功能
 pub struct ComprehensiveValidator {
-    pub config: ValidationConfig,
-    pub node_validator: NodeValidator<'static>,
-    pub cluster_validator: ClusterValidator<'static>,
+    pub config: Arc<ValidationConfig>,
+    pub node_validator: NodeValidator,
+    pub cluster_validator: ClusterValidator,
     pub timeout_validator: TimeoutValidator,
 }
 
@@ -32,19 +33,18 @@ impl ComprehensiveValidator {
     /// # Examples
     ///
     /// ```rust
-    /// use conflux::raft::validation::{ValidationConfig, ComprehensiveValidator};
+    /// use conflux::raft::validation::{ComprehensiveValidator, ValidationConfig};
     ///
     /// let config = ValidationConfig::default();
     /// let validator = ComprehensiveValidator::new(config);
     /// ```
     pub fn new(config: ValidationConfig) -> Self {
-        // 使用Box来避免生命周期问题
-        let config_ref = Box::leak(Box::new(config.clone()));
+        let config_arc = Arc::new(config);
 
         Self {
-            config,
-            node_validator: NodeValidator::new(config_ref),
-            cluster_validator: ClusterValidator::new(config_ref),
+            config: config_arc.clone(),
+            node_validator: NodeValidator::new(config_arc.clone()),
+            cluster_validator: ClusterValidator::new(config_arc),
             timeout_validator: TimeoutValidator::new(),
         }
     }
@@ -81,26 +81,45 @@ impl ComprehensiveValidator {
         address: &str,
         existing_nodes: &[(NodeId, String)],
     ) -> Result<std::net::SocketAddr> {
-        debug!("Comprehensive validation for adding node {} at {}", node_id, address);
+        debug!(
+            "Comprehensive validation for adding node {} at {}",
+            node_id, address
+        );
 
-        // 1. 验证节点ID
+        // 1. 验证节点ID本身 (职责在 NodeValidator)
         self.node_validator.validate_node_id(node_id)?;
 
-        // 2. 验证节点ID唯一性
-        let existing_node_ids: Vec<NodeId> = existing_nodes.iter().map(|(id, _)| *id).collect();
-        self.node_validator.validate_node_id_uniqueness(node_id, &existing_node_ids)?;
-
-        // 3. 验证节点地址
+        // 2. 验证节点地址本身 (职责在 NodeValidator)
         let socket_addr = self.node_validator.validate_node_address(address)?;
 
-        // 4. 验证地址唯一性
-        let existing_addresses: Vec<String> = existing_nodes.iter().map(|(_, addr)| addr.clone()).collect();
-        self.node_validator.validate_address_uniqueness(address, &existing_addresses)?;
+        // 3. 验证唯一性 (职责在 ComprehensiveValidator)
+        let existing_ids: HashSet<NodeId> = existing_nodes.iter().map(|(id, _)| *id).collect();
+        if existing_ids.contains(&node_id) {
+            return Err(ConfluxError::validation(format!(
+                "Node ID {} already exists in cluster",
+                node_id
+            )));
+        }
 
-        // 5. 验证集群大小
-        self.cluster_validator.validate_cluster_size(existing_nodes.len(), 1)?;
+        let existing_addrs: HashSet<SocketAddr> = existing_nodes
+            .iter()
+            .filter_map(|(_, addr)| addr.parse().ok())
+            .collect();
+        if existing_addrs.contains(&socket_addr) {
+            return Err(ConfluxError::validation(format!(
+                "Address {} already exists in cluster",
+                address
+            )));
+        }
 
-        debug!("Add node validation passed for node {} at {}", node_id, address);
+        // 4. 验证集群大小 (职责在 ClusterValidator)
+        self.cluster_validator
+            .validate_cluster_size(existing_nodes.len(), 1)?;
+
+        debug!(
+            "Add node validation passed for node {} at {}",
+            node_id, address
+        );
         Ok(socket_addr)
     }
 
@@ -315,7 +334,7 @@ impl ComprehensiveValidator {
     /// # Returns
     ///
     /// 返回当前的验证配置
-    pub fn get_config(&self) -> &ValidationConfig {
+    pub fn get_config(&self) -> &Arc<ValidationConfig> {
         &self.config
     }
 
@@ -325,9 +344,10 @@ impl ComprehensiveValidator {
     ///
     /// * `new_config` - 新的验证配置
     pub fn update_config(&mut self, new_config: ValidationConfig) {
-        self.config = new_config;
-        // 注意：这里需要重新创建验证器，但由于生命周期问题，
-        // 在实际实现中可能需要不同的设计
+        let new_config_arc = Arc::new(new_config);
+        self.config = new_config_arc.clone();
+        self.node_validator = NodeValidator::new(new_config_arc.clone());
+        self.cluster_validator = ClusterValidator::new(new_config_arc);
     }
 }
 
@@ -367,61 +387,5 @@ impl ClusterSuggestions {
         self.size_recommendations.len() +
         self.timeout_recommendations.len() +
         self.network_recommendations.len()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_validate_add_node() {
-        let config = ValidationConfig::default();
-        let validator = ComprehensiveValidator::new(config);
-        let existing_nodes = vec![(1, "127.0.0.1:8080".to_string())];
-
-        // Valid addition
-        let result = validator.validate_add_node(2, "127.0.0.1:8081", &existing_nodes);
-        assert!(result.is_ok());
-
-        // Duplicate node ID
-        let result = validator.validate_add_node(1, "127.0.0.1:8082", &existing_nodes);
-        assert!(result.is_err());
-
-        // Duplicate address
-        let result = validator.validate_add_node(3, "127.0.0.1:8080", &existing_nodes);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_remove_node() {
-        let config = ValidationConfig::default();
-        let validator = ComprehensiveValidator::new(config);
-        let existing_nodes = vec![(1, "127.0.0.1:8080".to_string()), (2, "127.0.0.1:8081".to_string())];
-
-        // Valid removal
-        let result = validator.validate_remove_node(2, &existing_nodes);
-        assert!(result.is_ok());
-
-        // Non-existent node
-        let result = validator.validate_remove_node(3, &existing_nodes);
-        assert!(result.is_err());
-
-        // Cannot remove last node
-        let single_node = vec![(1, "127.0.0.1:8080".to_string())];
-        let result = validator.validate_remove_node(1, &single_node);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_cluster_suggestions() {
-        let config = ValidationConfig::default();
-        let validator = ComprehensiveValidator::new(config);
-
-        let suggestions = validator.get_cluster_suggestions(4, 100, 300, 10);
-
-        // Should suggest odd cluster size
-        assert!(suggestions.has_suggestions());
-        assert!(suggestions.size_recommendations.iter().any(|s| s.contains("odd cluster size")));
     }
 }

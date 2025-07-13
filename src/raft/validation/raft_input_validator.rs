@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::error::Result;
 use crate::raft::types::NodeId;
 use crate::raft::validation::ClusterSuggestions;
@@ -225,7 +227,7 @@ impl RaftInputValidator {
     /// # Returns
     ///
     /// 返回当前的验证配置
-    pub fn get_config(&self) -> &ValidationConfig {
+    pub fn get_config(&self) -> &Arc<ValidationConfig> {
         self.comprehensive_validator.get_config()
     }
 }

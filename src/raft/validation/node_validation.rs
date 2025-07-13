@@ -7,16 +7,17 @@ use crate::error::{ConfluxError, Result};
 use crate::raft::types::NodeId;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
+use std::sync::Arc;
 use tracing::debug;
 
 /// 节点验证器
 ///
 /// 专门负责节点ID和地址的验证
-pub struct NodeValidator<'a> {
-    config: &'a ValidationConfig,
+pub struct NodeValidator {
+    config: Arc<ValidationConfig>,
 }
 
-impl<'a> NodeValidator<'a> {
+impl NodeValidator {
     /// 创建新的节点验证器
     ///
     /// # Arguments
@@ -27,11 +28,12 @@ impl<'a> NodeValidator<'a> {
     ///
     /// ```rust
     /// use conflux::raft::validation::{ValidationConfig, NodeValidator};
+    /// use std::sync::Arc;
     ///
     /// let config = ValidationConfig::default();
-    /// let validator = NodeValidator::new(&config);
+    /// let validator = NodeValidator::new(Arc::new(config));
     /// ```
-    pub fn new(config: &'a ValidationConfig) -> Self {
+    pub fn new(config: Arc<ValidationConfig>) -> Self {
         Self { config }
     }
 
@@ -230,193 +232,5 @@ impl<'a> NodeValidator<'a> {
 
         debug!("IP address {} is valid", ip);
         Ok(())
-    }
-
-    /// 验证节点ID的唯一性
-    ///
-    /// 检查节点ID是否在现有集群中已存在
-    ///
-    /// # Arguments
-    ///
-    /// * `node_id` - 要验证的节点ID
-    /// * `existing_nodes` - 现有节点ID列表
-    ///
-    /// # Returns
-    ///
-    /// 如果节点ID唯一返回Ok(())，否则返回错误
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use conflux::raft::validation::{ValidationConfig, NodeValidator};
-    ///
-    /// let config = ValidationConfig::default();
-    /// let validator = NodeValidator::new(&config);
-    /// let existing_nodes = vec![1, 2, 3];
-    ///
-    /// assert!(validator.validate_node_id_uniqueness(4, &existing_nodes).is_ok());
-    /// assert!(validator.validate_node_id_uniqueness(2, &existing_nodes).is_err());
-    /// ```
-    pub fn validate_node_id_uniqueness(
-        &self,
-        node_id: NodeId,
-        existing_nodes: &[NodeId],
-    ) -> Result<()> {
-        debug!(
-            "Validating node ID {} uniqueness against {} existing nodes",
-            node_id,
-            existing_nodes.len()
-        );
-
-        if existing_nodes.contains(&node_id) {
-            return Err(ConfluxError::validation(format!(
-                "Node ID {} already exists in cluster",
-                node_id
-            )));
-        }
-
-        debug!("Node ID {} is unique", node_id);
-        Ok(())
-    }
-
-    /// 验证地址的唯一性
-    ///
-    /// 检查地址是否在现有集群中已存在
-    ///
-    /// # Arguments
-    ///
-    /// * `address` - 要验证的地址
-    /// * `existing_addresses` - 现有地址列表
-    ///
-    /// # Returns
-    ///
-    /// 如果地址唯一返回Ok(())，否则返回错误
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use conflux::raft::validation::{ValidationConfig, NodeValidator};
-    ///
-    /// let config = ValidationConfig::default();
-    /// let validator = NodeValidator::new(&config);
-    /// let existing_addresses = vec!["127.0.0.1:8080".to_string(), "127.0.0.1:8081".to_string()];
-    ///
-    /// assert!(validator.validate_address_uniqueness("127.0.0.1:8082", &existing_addresses).is_ok());
-    /// assert!(validator.validate_address_uniqueness("127.0.0.1:8080", &existing_addresses).is_err());
-    /// ```
-    pub fn validate_address_uniqueness(
-        &self,
-        address: &str,
-        existing_addresses: &[String],
-    ) -> Result<()> {
-        debug!(
-            "Validating address {} uniqueness against {} existing addresses",
-            address,
-            existing_addresses.len()
-        );
-
-        // Parse the new address to normalize it
-        let new_addr = self.validate_node_address(address)?;
-
-        for existing in existing_addresses {
-            if let Ok(existing_addr) = SocketAddr::from_str(existing) {
-                if new_addr == existing_addr {
-                    return Err(ConfluxError::validation(format!(
-                        "Address {} already exists in cluster",
-                        address
-                    )));
-                }
-            }
-        }
-
-        debug!("Address {} is unique", address);
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_validate_node_id() {
-        let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
-
-        // Valid node IDs
-        assert!(validator.validate_node_id(1).is_ok());
-        assert!(validator.validate_node_id(100).is_ok());
-        assert!(validator.validate_node_id(65535).is_ok());
-
-        // Invalid node IDs
-        assert!(validator.validate_node_id(0).is_err());
-        assert!(validator.validate_node_id(65536).is_err());
-    }
-
-    #[test]
-    fn test_validate_node_address() {
-        let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
-
-        // Valid addresses
-        assert!(validator.validate_node_address("127.0.0.1:8080").is_ok());
-        assert!(validator
-            .validate_node_address("192.168.1.100:3000")
-            .is_ok());
-        assert!(validator.validate_node_address("[::1]:8080").is_ok());
-
-        // Invalid addresses
-        assert!(validator.validate_node_address("").is_err());
-        assert!(validator.validate_node_address("invalid").is_err());
-        assert!(validator.validate_node_address("127.0.0.1:99999").is_err());
-        assert!(validator.validate_node_address("127.0.0.1:80").is_err()); // Port too low
-    }
-
-    #[test]
-    fn test_validate_node_id_uniqueness() {
-        let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
-        let existing_nodes = vec![1, 2, 3];
-
-        // Unique node ID
-        assert!(validator
-            .validate_node_id_uniqueness(4, &existing_nodes)
-            .is_ok());
-
-        // Duplicate node ID
-        assert!(validator
-            .validate_node_id_uniqueness(2, &existing_nodes)
-            .is_err());
-    }
-
-    #[test]
-    fn test_validate_address_uniqueness() {
-        let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
-        let existing_addresses = vec!["127.0.0.1:8080".to_string(), "127.0.0.1:8081".to_string()];
-
-        // Unique address
-        assert!(validator
-            .validate_address_uniqueness("127.0.0.1:8082", &existing_addresses)
-            .is_ok());
-
-        // Duplicate address
-        assert!(validator
-            .validate_address_uniqueness("127.0.0.1:8080", &existing_addresses)
-            .is_err());
-    }
-
-    #[test]
-    fn test_strict_network_policy() {
-        let mut config = ValidationConfig::default();
-        config.allow_localhost = false;
-        config.allow_private_ips = false;
-
-        let validator = NodeValidator::new(&config);
-
-        // These should fail with strict policy
-        assert!(validator.validate_node_address("127.0.0.1:8080").is_err());
-        assert!(validator.validate_node_address("192.168.1.1:8080").is_err());
-        assert!(validator.validate_node_address("10.0.0.1:8080").is_err());
     }
 }

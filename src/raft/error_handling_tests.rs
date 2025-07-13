@@ -2,6 +2,8 @@
 
 #[cfg(test)]
 mod error_handling_tests {
+    use std::sync::Arc;
+
     use crate::auth::AuthContext;
     use crate::config::AppConfig;
     use crate::error::ConfluxError;
@@ -9,8 +11,7 @@ mod error_handling_tests {
     use crate::raft::{
         node::{NodeConfig, RaftNode, ResourceLimits},
         types::*,
-        validation::{RaftInputValidator, ValidationConfig}
-        ,
+        validation::{RaftInputValidator, ValidationConfig},
     };
 
     /// Helper function to create test app config
@@ -50,7 +51,7 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_invalid_node_id_error_handling() {
         let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
+        let validator = NodeValidator::new(Arc::new(config));
 
         // Test various invalid node IDs
         let invalid_node_ids = vec![0, 65536, u64::MAX];
@@ -72,7 +73,7 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_invalid_address_error_handling() {
         let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
+        let validator = NodeValidator::new(Arc::new(config));
 
         // Test various invalid addresses
         let invalid_addresses = vec![
@@ -105,7 +106,7 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_cluster_size_limit_error_handling() {
         let config = ValidationConfig::default();
-        let validator = ClusterValidator::new(&config);
+        let validator = ClusterValidator::new(Arc::new(config));
 
         // Test cluster size limits
         let result = validator.validate_cluster_size(100, 1);
@@ -122,7 +123,7 @@ mod error_handling_tests {
             max_cluster_size: 3,
             ..Default::default()
         };
-        let validator = ClusterValidator::new(&config);
+        let validator = ClusterValidator::new(Arc::new(config));
 
         let result = validator.validate_cluster_size(3, 1);
         assert!(result.is_err());
@@ -345,7 +346,7 @@ mod error_handling_tests {
         assert!(result.is_ok());
 
         let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
+        let validator = NodeValidator::new(Arc::new(config));
 
         // Test very long address
         let long_address = format!("{}:8080", "a".repeat(300));
@@ -359,14 +360,20 @@ mod error_handling_tests {
             max_cluster_size: 1,
             ..Default::default()
         };
-        let validator = NodeValidator::new(&config);
+        let validator = NodeValidator::new(Arc::new(config));
 
         // Test exact boundary
         assert!(validator.validate_node_id(1).is_ok());
         assert!(validator.validate_node_id(2).is_ok());
         assert!(validator.validate_node_id(3).is_err());
 
-        let validator = ClusterValidator::new(&config);
+        let config = ValidationConfig {
+            min_node_id: 1,
+            max_node_id: 2,
+            max_cluster_size: 1,
+            ..Default::default()
+        };
+        let validator = ClusterValidator::new(Arc::new(config));
 
         // Test cluster size boundary
         assert!(validator.validate_cluster_size(0, 1).is_ok());
@@ -381,7 +388,7 @@ mod error_handling_tests {
             allow_private_ips: false,
             ..Default::default()
         };
-        let validator = NodeValidator::new(&config);
+        let validator = NodeValidator::new(Arc::new(config));
 
         // Test that common addresses are rejected
         let restricted_addresses = vec![
@@ -473,7 +480,7 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_error_message_consistency() {
         let config = ValidationConfig::default();
-        let validator = NodeValidator::new(&config);
+        let validator = NodeValidator::new(Arc::new(config));
 
         // Test that similar errors have consistent message formats
         let node_id_errors = vec![

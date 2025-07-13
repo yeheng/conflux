@@ -217,7 +217,7 @@ mod tests {
     #[tokio::test]
     async fn test_last_applied_state() {
         let (store, _temp_dir) = create_test_store().await;
-        let mut sm = ConfluxStateMachineWrapper::new(store);
+        let sm = ConfluxStateMachineWrapper::new(store);
 
         // Initially no last applied log
         let (last_applied, membership) = sm.get_state_info().await;
