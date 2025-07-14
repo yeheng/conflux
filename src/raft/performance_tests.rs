@@ -11,9 +11,13 @@ mod performance_tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
     use tokio::time::timeout;
+    use uuid::Uuid;
 
     /// Helper function to create test app config
     async fn create_test_app_config() -> AppConfig {
+        // Generate a unique identifier for this test instance
+        let test_id = Uuid::new_v4().to_string();
+
         AppConfig {
             server: crate::config::ServerConfig {
                 host: "127.0.0.1".to_string(),
@@ -22,7 +26,7 @@ mod performance_tests {
                 request_timeout_secs: 30,
             },
             storage: crate::config::StorageConfig {
-                data_dir: format!("/tmp/conflux_perf_test_{}", std::process::id()),
+                data_dir: format!("/tmp/conflux_perf_test_{}", test_id),
                 max_open_files: 1000,
                 cache_size_mb: 64,
                 write_buffer_size_mb: 64,

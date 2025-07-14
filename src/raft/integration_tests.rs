@@ -13,9 +13,13 @@ mod integration_tests {
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::time::timeout;
+    use uuid::Uuid;
 
     /// Helper function to create test app config
     async fn create_test_app_config() -> AppConfig {
+        // Generate a unique identifier for this test instance
+        let test_id = Uuid::new_v4().to_string();
+
         AppConfig {
             server: crate::config::ServerConfig {
                 host: "127.0.0.1".to_string(),
@@ -26,14 +30,14 @@ mod integration_tests {
             raft: crate::config::RaftConfig {
                 node_id: 1,
                 cluster_name: "test_cluster".to_string(),
-                data_dir: format!("/tmp/conflux_test_{}", std::process::id()),
+                data_dir: format!("/tmp/conflux_test_{}", test_id),
                 heartbeat_interval_ms: 150,
                 election_timeout_ms: 300,
                 snapshot_threshold: 1000,
                 max_applied_log_to_keep: 1000,
             },
             storage: crate::config::StorageConfig {
-                data_dir: format!("/tmp/conflux_test_{}", std::process::id()),
+                data_dir: format!("/tmp/conflux_test_{}", test_id),
                 max_open_files: 1000,
                 cache_size_mb: 64,
                 write_buffer_size_mb: 64,

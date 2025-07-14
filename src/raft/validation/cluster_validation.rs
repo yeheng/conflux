@@ -60,6 +60,13 @@ impl ClusterValidator {
     /// assert!(validator.validate_cluster_size(100, 1).is_err()); // 超过默认限制
     /// ```
     pub fn validate_cluster_size(&self, current_size: usize, adding_nodes: usize) -> Result<()> {
+
+        if current_size > self.config.max_cluster_size {
+            return Err(ConfluxError::validation(format!(
+                "Cluster size would exceed maximum: {} + {} > {}",
+                current_size, adding_nodes, self.config.max_cluster_size
+            )));
+        }
         let new_size = current_size + adding_nodes;
 
         debug!(

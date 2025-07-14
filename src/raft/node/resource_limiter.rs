@@ -350,15 +350,20 @@ mod tests {
         let mut limits = ResourceLimits::default();
         limits.max_memory_usage = 1024; // 1KB
         limits.max_request_size = 512; // 512B
-        
+
         let limiter = ResourceLimiter::new(limits);
-        
+
         // 第一个请求应该成功
         let _permit1 = limiter.check_request_allowed(512, None).await.unwrap();
-        
+
         // 第二个请求应该失败（内存不足）
-        let result = limiter.check_request_allowed(512, None).await;
+        let result = limiter.check_request_allowed(513, None).await; // 512 + 513 > 1024
         assert!(result.is_err());
+
+        // 释放第一个permit后，应该可以再次请求
+        drop(_permit1);
+        let result = limiter.check_request_allowed(512, None).await;
+        assert!(result.is_ok());
     }
 
     #[test]

@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod error_handling_tests {
     use std::sync::Arc;
+    use uuid::Uuid;
 
     use crate::auth::AuthContext;
     use crate::config::AppConfig;
@@ -16,6 +17,9 @@ mod error_handling_tests {
 
     /// Helper function to create test app config
     async fn create_test_app_config() -> AppConfig {
+        // Generate a unique identifier for this test instance
+        let test_id = Uuid::new_v4().to_string();
+
         AppConfig {
             server: crate::config::ServerConfig {
                 host: "127.0.0.1".to_string(),
@@ -24,7 +28,7 @@ mod error_handling_tests {
                 request_timeout_secs: 30,
             },
             storage: crate::config::StorageConfig {
-                data_dir: format!("/tmp/conflux_error_test_{}", std::process::id()),
+                data_dir: format!("/tmp/conflux_error_test_{}", test_id),
                 max_open_files: 1000,
                 cache_size_mb: 64,
                 write_buffer_size_mb: 64,
@@ -233,7 +237,7 @@ mod error_handling_tests {
 
         match result {
             Err(ConfluxError::Validation(msg)) => {
-                assert!(msg.contains("last node"));
+                assert!(msg.contains("last node") || msg.contains("Cannot remove the last node"));
             }
             _ => panic!("Expected last node removal error"),
         }
